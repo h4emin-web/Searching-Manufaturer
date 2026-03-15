@@ -118,12 +118,18 @@ const Index = () => {
       try {
         const statusRes = await fetch(`${API_BASE}/sourcing/${taskId}`);
         const statusData = await statusRes.json();
-        // real progress from backend (0,10,70,100) – fake animation fills the gaps
-        if (statusData.progress) setSourcingProgress(statusData.progress);
+        // only move forward, never backward
+        if (statusData.progress) setSourcingProgress(prev => Math.max(prev, statusData.progress));
 
         if (statusData.status === "completed") {
           clearInterval(pollRef.current!);
           pollRef.current = null;
+          // 에러 메시지 있으면 표시 (API 키 미설정 등)
+          if (statusData.error && (!statusData.deduplicated || statusData.deduplicated.length === 0)) {
+            setSourcingError(`검색 실패: ${statusData.error}`);
+            setView("sourcing");
+            return;
+          }
           const mfrs: Manufacturer[] = (statusData.deduplicated || []).map((m: any) => ({
             id: m.id || m.canonical_name || Math.random().toString(),
             name: m.name, country: m.country, city: m.city,

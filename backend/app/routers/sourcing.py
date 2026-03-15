@@ -72,6 +72,11 @@ async def _run_sourcing(task_id: str, req: SourcingRequest):
         _tasks[task_id].llm_results = raw_result["llm_results"]
         _tasks[task_id].total_raw = raw_result["total_raw"]
 
+        # LLM 에러 기록
+        if raw_result.get("errors"):
+            err_summary = "; ".join(f"{k.value}: {v[:80]}" for k, v in raw_result["errors"].items())
+            _tasks[task_id].error = err_summary
+
         # 2. 중복 제거 + 병합
         dedup_result = deduplicate_manufacturers(raw_result["llm_results"])
         _tasks[task_id].progress = 100

@@ -65,14 +65,46 @@ def _build_prompt(
 
 
 # ─── OpenAI-compatible 직접 호출 ───────────────────────────────
+def _extract_manufacturers(text: str) -> list[dict]:
+    """JSON 텍스트에서 manufacturers 배열 추출 (마크다운 코드블록 허용)"""
+    import re
+    # 마크다운 코드블록 제거
+    text = re.sub(r"```(?:json)?\s*", "", text).strip().rstrip("`").strip()
+    try:
+        data = json.loads(text)
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            # {"manufacturers": [...]} 형태
+            for key in ("manufacturers", "results", "data", "items"):
+                if key in data and isinstance(data[key], list):
+                    return data[key]
+    except json.JSONDecodeError:
+        # JSON 블록 탐색
+        match = re.search(r"\{[\s\S]*\}", text)
+        if match:
+            try:
+                data = json.loads(match.group())
+                if isinstance(data, dict):
+                    for key in ("manufacturers", "results", "data", "items"):
+                        if key in data and isinstance(data[key], list):
+                            return data[key]
+            except Exception:
+                pass
+    return []
+
+
 async def _query_openai_compatible(
     base_url: str,
     api_key: str,
     model: str,
     system_prompt: str,
     user_prompt: str,
-    timeout: float = 60.0,
+    timeout: float = 90.0,
 ) -> list[dict]:
+    if not api_key:
+        raise ValueError(f"API key not configured for {base_url}")
+
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -95,8 +127,9 @@ async def _query_openai_compatible(
         )
         resp.raise_for_status()
         content = resp.json()["choices"][0]["message"]["content"]
-        data = json.loads(content)
-        return data.get("manufacturers", [])
+        result = _extract_manufacturers(content)
+        logger.info("api_response_parsed", base_url=base_url, count=len(result), raw_length=len(content))
+        return result
 
 
 # ─── Ollama 직접 호출 ──────────────────────────────────────────

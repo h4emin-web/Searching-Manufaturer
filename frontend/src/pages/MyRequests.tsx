@@ -31,10 +31,10 @@ const STATUS_LABEL: Record<SourcingRequest["status"], string> = {
 };
 
 const STATUS_COLOR: Record<SourcingRequest["status"], string> = {
-  searching:  "text-primary",
+  searching:  "text-foreground",
   reviewing:  "text-accent",
-  outreach:   "text-primary",
-  monitoring: "text-primary",
+  outreach:   "text-foreground",
+  monitoring: "text-foreground",
   completed:  "text-muted-foreground",
 };
 
@@ -45,34 +45,51 @@ const PURPOSE_LABEL: Record<string, string> = {
 const MyRequests = ({ user, onNewRequest, onViewRequest, onViewAll, apiBase }: MyRequestsProps) => {
   const [requests, setRequests] = useState<SourcingRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cancelling, setCancelling] = useState<string | null>(null);
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      try {
-        const res = await fetch(`${apiBase}/users/${encodeURIComponent(user.koreanName)}/requests`);
-        if (res.ok) {
-          const data = await res.json();
-          // backend returns snake_case, map to camelCase
-          const mapped = data.map((r: any) => ({
-            id: r.id,
-            ingredientName: r.ingredient_name ?? r.ingredientName,
-            purpose: r.purpose,
-            requirements: r.requirements ?? [],
-            status: r.status,
-            createdAt: r.created_at ?? r.createdAt,
-            taskId: r.task_id ?? r.taskId,
-            totalFound: r.total_found ?? r.totalFound,
-            replied: r.replied,
-            sent: r.sent,
-          }));
-          setRequests(mapped);
-        }
-      } catch { /* ignore */ }
-      setLoading(false);
-    };
-    load();
-  }, [user.koreanName, apiBase]);
+  const load = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${apiBase}/users/${encodeURIComponent(user.koreanName)}/requests`);
+      if (res.ok) {
+        const data = await res.json();
+        const mapped = data.map((r: any) => ({
+          id: r.id,
+          ingredientName: r.ingredient_name ?? r.ingredientName,
+          purpose: r.purpose,
+          requirements: r.requirements ?? [],
+          status: r.status,
+          createdAt: r.created_at ?? r.createdAt,
+          taskId: r.task_id ?? r.taskId,
+          totalFound: r.total_found ?? r.totalFound,
+          replied: r.replied,
+          sent: r.sent,
+        }));
+        setRequests(mapped);
+      }
+    } catch { /* ignore */ }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [user.koreanName, apiBase]);
+
+  const handleCancel = async (e: React.MouseEvent, req: SourcingRequest) => {
+    e.stopPropagation();
+    setCancelling(req.id);
+    try {
+      if (req.taskId) {
+        await fetch(`${apiBase}/sourcing/${req.taskId}`, { method: "DELETE" });
+      }
+      await fetch(`${apiBase}/users/${encodeURIComponent(user.koreanName)}/requests/${req.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "completed" }),
+      });
+      // refresh list
+      await load();
+    } catch { /* ignore */ }
+    setCancelling(null);
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -131,51 +148,68 @@ const MyRequests = ({ user, onNewRequest, onViewRequest, onViewAll, apiBase }: M
           <div className="space-y-2">
             <AnimatePresence>
               {requests.map((req, i) => (
-                <motion.button
+                <motion.div
                   key={req.id}
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.05 }}
-                  onClick={() => onViewRequest(req)}
-                  className="w-full glass-surface hover:glass-surface-hover rounded-sm p-4 text-left transition-all duration-200 hover:glow-primary"
+                  className="w-full glass-surface rounded-sm p-4 text-left transition-all duration-200"
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2 flex-wrap">
-                        <span className="font-semibold text-foreground">{req.ingredientName}</span>
-                        <span className="text-data font-mono px-2 py-0.5 rounded-sm bg-secondary text-muted-foreground">
-                          {PURPOSE_LABEL[req.purpose] || req.purpose}
-                        </span>
+                  <div
+                    className="cursor-pointer hover:glass-surface-hover rounded-sm"
+                    onClick={() => onViewRequest(req)}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2 flex-wrap">
+                          <span className="font-semibold text-foreground">{req.ingredientName}</span>
+                          <span className="text-data font-mono px-2 py-0.5 rounded-sm bg-secondary text-muted-foreground">
+                            {PURPOSE_LABEL[req.purpose] || req.purpose}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-4 text-data text-muted-foreground flex-wrap">
+                          <span className="font-mono">
+                            {new Date(req.createdAt).toLocaleDateString("ko-KR")}
+                          </span>
+                          {req.requirements.length > 0 && (
+                            <span>{req.requirements.slice(0, 3).join(" · ")}{req.requirements.length > 3 ? " ..." : ""}</span>
+                          )}
+                          {req.totalFound !== undefined && req.totalFound > 0 && (
+                            <span>제조소 <span className="text-foreground font-semibold">{req.totalFound}</span>곳</span>
+                          )}
+                          {req.status === "monitoring" && req.sent !== undefined && (
+                            <>
+                              <span>발송 <span className="text-foreground font-semibold">{req.sent}</span></span>
+                              <span>응답 <span className="text-foreground font-semibold">{req.replied || 0}</span></span>
+                            </>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-4 text-data text-muted-foreground flex-wrap">
-                        <span className="font-mono">
-                          {new Date(req.createdAt).toLocaleDateString("ko-KR")}
-                        </span>
-                        {req.requirements.length > 0 && (
-                          <span>{req.requirements.slice(0, 3).join(" · ")}{req.requirements.length > 3 ? " ..." : ""}</span>
-                        )}
-                        {req.totalFound !== undefined && req.totalFound > 0 && (
-                          <span>제조소 <span className="text-primary font-semibold">{req.totalFound}</span>곳</span>
-                        )}
-                        {req.status === "monitoring" && req.sent !== undefined && (
-                          <>
-                            <span>발송 <span className="text-foreground font-semibold">{req.sent}</span></span>
-                            <span>응답 <span className="text-primary font-semibold">{req.replied || 0}</span></span>
-                          </>
-                        )}
+                      <div className={`text-data font-mono font-semibold shrink-0 ml-4 ${STATUS_COLOR[req.status]}`}>
+                        {STATUS_LABEL[req.status]}
                       </div>
                     </div>
-                    <div className={`text-data font-mono font-semibold shrink-0 ml-4 ${STATUS_COLOR[req.status]}`}>
-                      {STATUS_LABEL[req.status]}
-                    </div>
+
+                    {(req.status === "searching" || req.status === "outreach" || req.status === "monitoring") && (
+                      <div className="mt-3 h-[1px] bg-secondary overflow-hidden">
+                        <div className="scanning-line h-full w-full" />
+                      </div>
+                    )}
                   </div>
 
-                  {(req.status === "searching" || req.status === "outreach" || req.status === "monitoring") && (
-                    <div className="mt-3 h-[1px] bg-secondary overflow-hidden">
-                      <div className="scanning-line h-full w-full" />
+                  {/* 진행 중 소싱 중단 버튼 */}
+                  {req.status === "searching" && (
+                    <div className="mt-3 flex justify-end">
+                      <button
+                        onClick={(e) => handleCancel(e, req)}
+                        disabled={cancelling === req.id}
+                        className="text-data text-muted-foreground hover:text-destructive transition-colors border border-border hover:border-destructive/30 px-3 py-1 rounded-sm disabled:opacity-40"
+                      >
+                        {cancelling === req.id ? "중단 중..." : "✕ 소싱 중단"}
+                      </button>
                     </div>
                   )}
-                </motion.button>
+                </motion.div>
               ))}
             </AnimatePresence>
           </div>
