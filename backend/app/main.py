@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
     # Supabase 초기화 + 기존 스레드 로드
     from .db import get_supabase
     from .services.thread_store import thread_store
-    db = await get_supabase()
+    db = get_supabase()
     if db:
         thread_store.set_db(db)
         await thread_store.load_from_db()

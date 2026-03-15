@@ -5,10 +5,7 @@ pydantic>=2.10
 pydantic-ai>=0.0.20
 pydantic-settings==2.6.1
 
-# Database
-supabase==2.10.0
-
-# LLM (openai 패키지로 Gemini OpenAI호환 API 사용 - google-generativeai 대체)
+# LLM
 openai>=1.57.0
 httpx>=0.26,<0.28
 

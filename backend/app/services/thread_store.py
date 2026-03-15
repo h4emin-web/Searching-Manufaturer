@@ -1,8 +1,7 @@
 """
 이메일 스레드 저장소
-- 인메모리(primary) + Supabase(persistence) 하이브리드
-- 기존 동기 API 유지 (callers 변경 없음)
-- Supabase ops는 백그라운드 asyncio task로 처리
+- 인메모리(primary) + Supabase REST(persistence) 하이브리드
+- 기존 동기 API 유지, Supabase ops는 백그라운드 asyncio task
 """
 import asyncio
 from dataclasses import dataclass, field
@@ -14,14 +13,14 @@ logger = structlog.get_logger()
 
 @dataclass
 class EmailThread:
-    message_id: str             # 우리가 보낸 최초 메일의 Message-ID
-    last_message_id: str        # 가장 최근 발송 Message-ID (In-Reply-To용)
+    message_id: str
+    last_message_id: str
     to_email: str
     manufacturer_name: str
-    ingredient: str             # 소싱 중인 원료명
+    ingredient: str
     subject: str
-    country: str = ""           # 제조원 국가 (언어 선택용)
-    auto_reply_count: int = 0   # 자동 답변 횟수 (무한루프 방지)
+    country: str = ""
+    auto_reply_count: int = 0
     max_auto_replies: int = 3
     conversation: list[dict] = field(default_factory=list)
 
@@ -29,41 +28,30 @@ class EmailThread:
 class ThreadStore:
     def __init__(self):
         self._threads: dict[str, EmailThread] = {}
-        self._by_message_id: dict[str, str] = {}   # any_msg_id → original_message_id
-        self._db = None  # Supabase AsyncClient (설정 후 주입)
+        self._by_message_id: dict[str, str] = {}
+        self._db = None  # SupabaseClient
 
     def set_db(self, client) -> None:
         self._db = client
 
-    # ─── 로드 (서버 시작 시 Supabase → 메모리) ─────────────────
     async def load_from_db(self) -> None:
         if not self._db:
             return
         try:
-            res = await self._db.table("email_threads").select("*").execute()
-            for row in res.data:
-                thread = self._row_to_thread(row)
-                self._threads[thread.message_id] = thread
+            rows = await self._db.select("email_threads")
+            for row in rows:
+                t = self._row_to_thread(row)
+                self._threads[t.message_id] = t
 
-            idx_res = await self._db.table("thread_message_index").select("*").execute()
-            for row in idx_res.data:
+            idx_rows = await self._db.select("thread_message_index")
+            for row in idx_rows:
                 self._by_message_id[row["any_message_id"]] = row["original_message_id"]
 
             logger.info("thread_store_loaded", count=len(self._threads))
         except Exception as exc:
             logger.warning("thread_store_load_failed", error=str(exc))
 
-    # ─── 등록 ────────────────────────────────────────────────────
-    def register(
-        self,
-        message_id: str,
-        to_email: str,
-        manufacturer_name: str,
-        ingredient: str,
-        subject: str,
-        body: str,
-        country: str = "",
-    ) -> None:
+    def register(self, message_id, to_email, manufacturer_name, ingredient, subject, body, country=""):
         thread = EmailThread(
             message_id=message_id,
             last_message_id=message_id,
@@ -76,11 +64,9 @@ class ThreadStore:
         )
         self._threads[message_id] = thread
         self._by_message_id[message_id] = message_id
-
         self._bg(self._persist_thread(thread))
         self._bg(self._persist_index(message_id, message_id))
 
-    # ─── 조회 ────────────────────────────────────────────────────
     def find_thread_by_reply(self, in_reply_to: str, references: str = "") -> EmailThread | None:
         for msg_id in [in_reply_to] + references.split():
             msg_id = msg_id.strip()
@@ -89,26 +75,16 @@ class ThreadStore:
                 return self._threads[origin]
         return None
 
-    # ─── 대화 추가 ───────────────────────────────────────────────
     def add_reply(self, thread: EmailThread, body: str) -> None:
-        thread.conversation.append({
-            "role": "manufacturer",
-            "body": body,
-            "sent_at": datetime.utcnow().isoformat(),
-        })
-        self._bg(self._update_conversation(thread))
+        thread.conversation.append({"role": "manufacturer", "body": body, "sent_at": datetime.utcnow().isoformat()})
+        self._bg(self._update_thread(thread))
 
     def add_our_reply(self, thread: EmailThread, message_id: str, body: str) -> None:
-        thread.conversation.append({
-            "role": "us",
-            "body": body,
-            "sent_at": datetime.utcnow().isoformat(),
-        })
+        thread.conversation.append({"role": "us", "body": body, "sent_at": datetime.utcnow().isoformat()})
         thread.last_message_id = message_id
         thread.auto_reply_count += 1
         self._by_message_id[message_id] = thread.message_id
-
-        self._bg(self._update_conversation(thread))
+        self._bg(self._update_thread(thread))
         self._bg(self._persist_index(message_id, thread.message_id))
 
     def can_auto_reply(self, thread: EmailThread) -> bool:
@@ -117,9 +93,7 @@ class ThreadStore:
     def all_threads(self) -> list[EmailThread]:
         return list(self._threads.values())
 
-    # ─── 내부 헬퍼 ───────────────────────────────────────────────
     def _bg(self, coro) -> None:
-        """백그라운드 asyncio task로 실행 (fire-and-forget)"""
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
@@ -145,7 +119,7 @@ class ThreadStore:
         if not self._db:
             return
         try:
-            await self._db.table("email_threads").upsert({
+            await self._db.upsert("email_threads", {
                 "message_id": thread.message_id,
                 "last_message_id": thread.last_message_id,
                 "to_email": thread.to_email,
@@ -156,19 +130,19 @@ class ThreadStore:
                 "auto_reply_count": thread.auto_reply_count,
                 "max_auto_replies": thread.max_auto_replies,
                 "conversation": thread.conversation,
-            }).execute()
+            })
         except Exception as exc:
             logger.warning("thread_persist_failed", error=str(exc))
 
-    async def _update_conversation(self, thread: EmailThread) -> None:
+    async def _update_thread(self, thread: EmailThread) -> None:
         if not self._db:
             return
         try:
-            await self._db.table("email_threads").update({
+            await self._db.update("email_threads", {
                 "conversation": thread.conversation,
                 "last_message_id": thread.last_message_id,
                 "auto_reply_count": thread.auto_reply_count,
-            }).eq("message_id", thread.message_id).execute()
+            }, {"message_id": thread.message_id})
         except Exception as exc:
             logger.warning("thread_update_failed", error=str(exc))
 
@@ -176,13 +150,12 @@ class ThreadStore:
         if not self._db:
             return
         try:
-            await self._db.table("thread_message_index").upsert({
+            await self._db.upsert("thread_message_index", {
                 "any_message_id": any_msg_id,
                 "original_message_id": original_msg_id,
-            }).execute()
+            })
         except Exception as exc:
             logger.warning("thread_index_persist_failed", error=str(exc))
 
 
-# 싱글톤
 thread_store = ThreadStore()
