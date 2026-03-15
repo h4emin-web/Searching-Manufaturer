@@ -25,6 +25,8 @@ const AgentTerminal = ({ apiName, isActive, sessionId, manufacturers }: AgentTer
   const scrollRef = useRef<HTMLDivElement>(null);
   const esRef = useRef<EventSource | null>(null);
   const startTimeRef = useRef(Date.now());
+  const sseConnectedRef = useRef(false);
+  const sseErrorCountRef = useRef(0);
 
   const addLog = (type: LogEntry["type"], message: string) => {
     const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
@@ -58,10 +60,17 @@ const AgentTerminal = ({ apiName, isActive, sessionId, manufacturers }: AgentTer
 
     // Connect to SSE stream for real-time events
     const connectSSE = () => {
+      esRef.current?.close();
       const es = new EventSource(`${API_BASE}/dashboard/${sessionId}/stream`);
       esRef.current = es;
 
-      es.onopen = () => addLog("info", "실시간 모니터링 연결 완료");
+      es.onopen = () => {
+        sseErrorCountRef.current = 0;
+        if (!sseConnectedRef.current) {
+          sseConnectedRef.current = true;
+          addLog("info", "실시간 모니터링 연결 완료");
+        }
+      };
 
       es.onmessage = (e) => {
         try {
@@ -77,7 +86,13 @@ const AgentTerminal = ({ apiName, isActive, sessionId, manufacturers }: AgentTer
         } catch { /* ignore parse errors */ }
       };
 
-      es.onerror = () => addLog("warning", "스트림 연결 끊김, 재연결 중...");
+      es.onerror = () => {
+        sseErrorCountRef.current += 1;
+        // 3번 연속 실패 시에만 로그 출력, EventSource가 자동 재연결함
+        if (sseErrorCountRef.current === 3) {
+          addLog("warning", "모니터링 연결 불안정 — 자동 재연결 중");
+        }
+      };
     };
 
     setTimeout(connectSSE, manufacturers.length * 1400 + 1000);
@@ -94,7 +109,7 @@ const AgentTerminal = ({ apiName, isActive, sessionId, manufacturers }: AgentTer
   const typeColor = {
     info: "text-muted-foreground",
     action: "text-foreground",
-    success: "text-primary",
+    success: "text-foreground font-semibold",
     warning: "text-accent",
   };
 
