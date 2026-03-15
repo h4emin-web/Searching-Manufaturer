@@ -76,24 +76,20 @@ const AllRequests = ({ onBack, apiBase, filterUser }: AllRequestsProps) => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [noteInputs, setNoteInputs] = useState<Record<string, string>>({});
-  const [savingNote, setSavingNote] = useState<string | null>(null);
+  const [generatingBriefing, setGeneratingBriefing] = useState<string | null>(null);
 
-  const handleAddNote = async (req: AllRequest) => {
-    const text = noteInputs[req.id]?.trim();
-    if (!text) return;
-    setSavingNote(req.id);
-    const newNotes = [...(req.notes || []), text];
+  const handleGenerateBriefing = async (req: AllRequest) => {
+    setGeneratingBriefing(req.id);
     try {
-      await fetch(`${apiBase}/users/${encodeURIComponent(req.user_name)}/requests/${req.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes: newNotes }),
+      const res = await fetch(`${apiBase}/users/${encodeURIComponent(req.user_name)}/requests/${req.id}/briefing`, {
+        method: "POST",
       });
-      setRequests(prev => prev.map(r => r.id === req.id ? { ...r, notes: newNotes } : r));
-      setNoteInputs(prev => ({ ...prev, [req.id]: "" }));
+      if (res.ok) {
+        const data = await res.json();
+        setRequests(prev => prev.map(r => r.id === req.id ? { ...r, notes: data.notes } : r));
+      }
     } catch { /* ignore */ }
-    setSavingNote(null);
+    setGeneratingBriefing(null);
   };
 
   useEffect(() => {
@@ -218,35 +214,24 @@ const AllRequests = ({ onBack, apiBase, filterUser }: AllRequestsProps) => {
                     </div>
                     <ProgressSteps status={req.status} />
 
-                    {/* 현재 진행상황 노트 */}
-                    {(req.notes && req.notes.length > 0) && (
+                    {/* AI 브리핑 */}
+                    {req.notes && req.notes.length > 0 && (
                       <div className="mt-3 space-y-1">
                         {req.notes.map((note, ni) => (
                           <div key={ni} className="text-data text-muted-foreground flex gap-2">
-                            <span className="text-foreground font-mono shrink-0">{ni + 1}.</span>
+                            <span className="text-primary font-mono shrink-0">▸</span>
                             <span>{note}</span>
                           </div>
                         ))}
                       </div>
                     )}
-
-                    {/* 노트 입력 */}
-                    <div className="mt-3 flex gap-2">
-                      <input
-                        value={noteInputs[req.id] || ""}
-                        onChange={(e) => setNoteInputs(prev => ({ ...prev, [req.id]: e.target.value }))}
-                        onKeyDown={(e) => { if (e.key === "Enter") handleAddNote(req); }}
-                        placeholder="진행상황 메모 추가..."
-                        className="flex-1 glass-surface rounded-sm px-3 py-1.5 text-foreground text-data bg-transparent focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/40"
-                      />
-                      <button
-                        onClick={() => handleAddNote(req)}
-                        disabled={savingNote === req.id || !noteInputs[req.id]?.trim()}
-                        className="px-3 py-1.5 rounded-sm text-data bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-40 transition-opacity"
-                      >
-                        추가
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => handleGenerateBriefing(req)}
+                      disabled={generatingBriefing === req.id}
+                      className="mt-2 text-data text-muted-foreground hover:text-primary transition-colors font-mono disabled:opacity-40"
+                    >
+                      {generatingBriefing === req.id ? "AI 분석 중..." : "↻ AI 현황 브리핑"}
+                    </button>
                   </div>
                   <div className="shrink-0 text-right">
                     {(req.status === "searching" || req.status === "outreach" || req.status === "monitoring" || req.status === "negotiating") && (
