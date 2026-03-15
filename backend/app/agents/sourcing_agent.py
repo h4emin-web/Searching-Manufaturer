@@ -132,8 +132,11 @@ async def _query_gemini_native(
                     logger.warning("gemini_attempt_failed", model=model, status=resp.status_code)
                     continue
                 content = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                logger.info("gemini_raw_response", model=model, preview=content[:500])
                 result = _extract_manufacturers(content)
                 logger.info("gemini_success", model=model, count=len(result))
+                if not result:
+                    logger.warning("gemini_parse_failed", model=model, content=content[:800])
                 return result
             except Exception as e:
                 errors.append(f"{model}: {e}")
