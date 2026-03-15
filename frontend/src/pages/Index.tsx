@@ -273,15 +273,24 @@ const Index = () => {
         body: JSON.stringify({
           session_id: sessionId || "demo",
           ingredient_name: apiName,
-          use_case: purpose,
+          use_case: purpose === "pharma" ? "pharmaceutical" : purpose,
           regulatory_requirements: requirements,
           regions,
           sourcing_notes: "",
           requester_name: user?.englishName || "",
         }),
       });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        setSourcingError(`검색 시작 실패: ${errData.detail || res.status}`);
+        return;
+      }
       const data = await res.json();
       const taskId = data.task_id;
+      if (!taskId) {
+        setSourcingError("서버 응답 오류: task_id 없음");
+        return;
+      }
       setCurrentTaskId(taskId);
       if (user) await apiUpdateRequest(user.koreanName, reqId, { taskId });
 

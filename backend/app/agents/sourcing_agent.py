@@ -1,48 +1,21 @@
 """
-Multi-LLM 소싱 에이전트 (pydantic-ai 기반)
-- Gemini (유료 API), DeepSeek / Qwen / llama3.2 (Ollama 무료 로컬)
-- 구조화된 출력 (Pydantic 스키마)
-- 각 LLM 오류 격리 (하나 실패해도 나머지 결과 사용)
+Multi-LLM 소싱 에이전트 — httpx 직접 호출 (pydantic-ai 제거)
+- Gemini / Qwen: OpenAI-compatible API, JSON mode, 단일 호출
+- Ollama: 로컬 fallback
 """
 import asyncio
 import json
-from typing import AsyncIterator
-import structlog
 import httpx
-
-from pydantic import BaseModel
-from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIModel
+import structlog
 
 from ..models.schemas import RawManufacturer, LLMProvider, UseCase
-
-
-class _ManufacturerItem(BaseModel):
-    """pydantic-ai 결과 타입 (source_llm 제외 — 나중에 할당)"""
-    name: str
-    country: str
-    country_code: str | None = None
-    city: str | None = None
-    contact_email: str | None = None
-    contact_wechat: str | None = None
-    contact_whatsapp: str | None = None
-    website: str | None = None
-    certifications: list[str] = []
-    products: list[str] = []
-    annual_capacity_kg: float | None = None
-    established_year: int | None = None
-    confidence_score: float = 0.5
-    source_notes: str = ""
 from ..config import get_settings
 
 logger = structlog.get_logger()
 settings = get_settings()
 
-# Ollama 직접 API (tool calling 미지원 모델용)
-_OLLAMA_DIRECT = "http://localhost:11434"
-
-# Ollama 응답 JSON 스키마
-_OLLAMA_SCHEMA = {
+# ─── 공통 JSON 스키마 ──────────────────────────────────────────
+_SCHEMA = {
     "type": "object",
     "properties": {
         "manufacturers": {
@@ -52,18 +25,11 @@ _OLLAMA_SCHEMA = {
                 "properties": {
                     "name":               {"type": "string"},
                     "country":            {"type": "string"},
-                    "country_code":       {"type": ["string", "null"]},
                     "city":               {"type": ["string", "null"]},
                     "contact_email":      {"type": ["string", "null"]},
-                    "contact_wechat":     {"type": ["string", "null"]},
-                    "contact_whatsapp":   {"type": ["string", "null"]},
                     "website":            {"type": ["string", "null"]},
                     "certifications":     {"type": "array", "items": {"type": "string"}},
-                    "products":           {"type": "array", "items": {"type": "string"}},
-                    "annual_capacity_kg": {"type": ["number", "null"]},
-                    "established_year":   {"type": ["integer", "null"]},
-                    "confidence_score":   {"type": "number", "minimum": 0.0, "maximum": 1.0},
-                    "source_notes":       {"type": "string"},
+                    "confidence_score":   {"type": "number"},
                 },
                 "required": ["name", "country"],
             }
@@ -72,79 +38,79 @@ _OLLAMA_SCHEMA = {
     "required": ["manufacturers"],
 }
 
-
-# ─── 프롬프트 템플릿 ───────────────────────────────────────────
-SOURCING_SYSTEM_PROMPT = """
-You are a pharmaceutical ingredient sourcing specialist with deep knowledge of global API
-and excipient manufacturers. Your task is to identify real, verifiable manufacturers of
-pharmaceutical ingredients.
-
-CRITICAL RULES:
-1. Only return manufacturers you have HIGH confidence actually exist.
-2. Return at least 8-15 manufacturers per query when possible.
-3. Prioritize manufacturers with verified GMP certifications.
-4. Include specific contact information whenever known (email, WeChat, WhatsApp, website).
-5. For Chinese manufacturers, include WeChat contact IDs if known.
-6. Return data in the exact JSON structure requested.
-"""
+SYSTEM_PROMPT = (
+    "You are a pharmaceutical ingredient sourcing specialist. "
+    "Identify real, verifiable manufacturers of pharmaceutical ingredients. "
+    "Return ONLY a JSON object matching the requested schema. "
+    "Include 10-15 manufacturers with high confidence. "
+    "Include contact emails and websites when known."
+)
 
 
-def _build_sourcing_prompt(
+def _build_prompt(
     ingredient: str,
     use_case: UseCase,
     regulatory_requirements: list[str],
-    ingredient_zh: str | None = None,
     sourcing_notes: str = "",
 ) -> str:
     req_list = ", ".join(regulatory_requirements) if regulatory_requirements else "Standard GMP"
-    zh_hint = f" (Chinese: {ingredient_zh})" if ingredient_zh else ""
-    notes_section = f"\nSpecial Sourcing Notes (from procurement team):\n{sourcing_notes}" if sourcing_notes.strip() else ""
-
-    return f"""
-Find manufacturers of the pharmaceutical ingredient: **{ingredient}**{zh_hint}
-
-Use Case: {use_case.value}
-Required Certifications: {req_list}{notes_section}
-
-For each manufacturer, provide:
-- Company name (official legal name)
-- Country and city of manufacturing site
-- Contact email
-- Official website URL
-- Certifications held (WHO-GMP, CoPP, CEP, ICH Q7, KDMF, etc.)
-- Key products manufactured
-- Estimated annual capacity if known
-- Confidence level (0.0-1.0) in this information
-
-Focus on: China, India, Europe (Germany, Italy, Netherlands), USA manufacturers.
-Return minimum 10 manufacturers if possible.
-""".strip()
+    notes = f"\nSpecial notes: {sourcing_notes}" if sourcing_notes.strip() else ""
+    return (
+        f"Find manufacturers of: {ingredient}\n"
+        f"Use case: {use_case.value}\n"
+        f"Required certifications: {req_list}{notes}\n"
+        f"Focus on China, India, Europe (Germany, Italy, Netherlands), USA.\n"
+        f"Return minimum 10 manufacturers."
+    )
 
 
-# ─── Ollama 가용성 체크 ───────────────────────────────────────
-def _check_ollama_available() -> bool:
-    import socket
-    try:
-        socket.setdefaulttimeout(2)
-        socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect(("localhost", 11434))
-        return True
-    except Exception:
-        return False
-
-
-# ─── Ollama 직접 호출 (JSON 스키마 모드) ──────────────────────
-async def _query_ollama(model_name: str, system_prompt: str, user_prompt: str) -> list[dict]:
-    """tool calling 없이 Ollama JSON 스키마 모드로 직접 호출"""
-    async with httpx.AsyncClient(timeout=30.0) as client:
+# ─── OpenAI-compatible 직접 호출 ───────────────────────────────
+async def _query_openai_compatible(
+    base_url: str,
+    api_key: str,
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    timeout: float = 60.0,
+) -> list[dict]:
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "response_format": {"type": "json_object"},
+        "temperature": 0.2,
+        "max_tokens": 4096,
+    }
+    async with httpx.AsyncClient(timeout=timeout) as client:
         resp = await client.post(
-            f"{_OLLAMA_DIRECT}/api/chat",
+            f"{base_url.rstrip('/')}/chat/completions",
+            headers=headers,
+            json=payload,
+        )
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"]
+        data = json.loads(content)
+        return data.get("manufacturers", [])
+
+
+# ─── Ollama 직접 호출 ──────────────────────────────────────────
+async def _query_ollama(model_name: str, system_prompt: str, user_prompt: str) -> list[dict]:
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        resp = await client.post(
+            "http://localhost:11434/api/chat",
             json={
                 "model": model_name,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
-                "format": _OLLAMA_SCHEMA,
+                "format": _SCHEMA,
                 "stream": False,
             },
         )
@@ -153,57 +119,45 @@ async def _query_ollama(model_name: str, system_prompt: str, user_prompt: str) -
         return json.loads(content).get("manufacturers", [])
 
 
-# ─── LLM별 모델명 매핑 ────────────────────────────────────────
-_OLLAMA_MODEL_MAP = {
-    LLMProvider.GPT4O:    settings.OLLAMA_GPT_MODEL,
-    LLMProvider.DEEPSEEK: settings.OLLAMA_DEEPSEEK_MODEL,
-    LLMProvider.QWEN:     settings.OLLAMA_QWEN_MODEL,
-}
-
-
 # ─── 단일 LLM 쿼리 ────────────────────────────────────────────
 async def _query_single_llm(
     provider: LLMProvider,
     prompt: str,
 ) -> tuple[LLMProvider, list[RawManufacturer], str | None]:
     try:
-        manufacturers: list[RawManufacturer] = []
+        raw_items: list[dict] = []
 
         if provider == LLMProvider.GEMINI:
-            model = OpenAIModel(
-                "gemini-2.5-flash",
-                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-                api_key=settings.GEMINI_API_KEY,
+            raw_items = await _query_openai_compatible(
+                base_url="https://generativelanguage.googleapis.com/v1beta/openai",
+                api_key=settings.GEMINI_API_KEY or "",
+                model="gemini-2.5-flash",
+                system_prompt=SYSTEM_PROMPT,
+                user_prompt=prompt,
             )
         elif provider == LLMProvider.QWEN:
-            model = OpenAIModel(
-                "qwen-plus",
+            raw_items = await _query_openai_compatible(
                 base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-                api_key=settings.QWEN_API_KEY,
+                api_key=settings.QWEN_API_KEY or "",
+                model="qwen-plus",
+                system_prompt=SYSTEM_PROMPT,
+                user_prompt=prompt,
             )
         else:
-            # DeepSeek/GPT4O: Ollama 로컬 폴백
-            model_name = _OLLAMA_MODEL_MAP.get(provider, settings.OLLAMA_QWEN_MODEL)
-            raw_items = await _query_ollama(model_name, SOURCING_SYSTEM_PROMPT, prompt)
-            for item in raw_items:
-                item["source_llm"] = provider
-                try:
-                    manufacturers.append(RawManufacturer.model_validate(item))
-                except Exception:
-                    pass
-            return provider, manufacturers, None
+            model_map = {
+                LLMProvider.GPT4O:    settings.OLLAMA_GPT_MODEL,
+                LLMProvider.DEEPSEEK: settings.OLLAMA_DEEPSEEK_MODEL,
+            }
+            model_name = model_map.get(provider, "qwen2.5:7b")
+            raw_items = await _query_ollama(model_name, SYSTEM_PROMPT, prompt)
 
-        agent = Agent(
-            model=model,
-            result_type=list[_ManufacturerItem],
-            system_prompt=SOURCING_SYSTEM_PROMPT,
-            retries=2,
-        )
-        result = await agent.run(prompt)
-        manufacturers = [
-            RawManufacturer(**item.model_dump(), source_llm=provider)
-            for item in result.data
-        ]
+        manufacturers: list[RawManufacturer] = []
+        for item in raw_items:
+            try:
+                item["source_llm"] = provider
+                manufacturers.append(RawManufacturer.model_validate(item))
+            except Exception:
+                pass
 
         logger.info("llm_sourcing_complete", provider=provider.value, count=len(manufacturers))
         return provider, manufacturers, None
@@ -221,24 +175,15 @@ async def run_multi_llm_sourcing(
     providers: list[LLMProvider] | None = None,
     ingredient_zh: str | None = None,
     sourcing_notes: str = "",
-    progress_callback: AsyncIterator | None = None,
+    progress_callback=None,
 ) -> dict:
-    """
-    모든 LLM에 동시 쿼리 후 결과 취합
-    Returns: {
-        "llm_results": {LLMProvider: [RawManufacturer]},
-        "errors": {LLMProvider: error_str},
-        "total_raw": int,
-    }
-    """
     if providers is None:
         providers = [LLMProvider.GEMINI, LLMProvider.QWEN]
 
-    prompt = _build_sourcing_prompt(
+    prompt = _build_prompt(
         ingredient=ingredient,
         use_case=use_case,
         regulatory_requirements=regulatory_requirements,
-        ingredient_zh=ingredient_zh,
         sourcing_notes=sourcing_notes,
     )
 
@@ -257,12 +202,6 @@ async def run_multi_llm_sourcing(
             llm_results[provider] = manufacturers
 
     total_raw = sum(len(v) for v in llm_results.values())
-
-    logger.info(
-        "multi_llm_sourcing_complete",
-        total_raw=total_raw,
-        successful_providers=list(llm_results.keys()),
-        failed_providers=list(errors.keys()),
-    )
+    logger.info("multi_llm_sourcing_complete", total_raw=total_raw)
 
     return {"llm_results": llm_results, "errors": errors, "total_raw": total_raw}
