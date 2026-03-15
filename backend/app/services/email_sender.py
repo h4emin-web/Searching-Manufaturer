@@ -6,7 +6,6 @@
 from email.message import EmailMessage
 from email.utils import make_msgid
 from email.policy import SMTP as SMTP_POLICY
-import asyncio
 import structlog
 
 from ..config import get_settings
@@ -23,27 +22,29 @@ async def _send_via_resend(
     message_id: str,
     reply_to: str | None = None,
 ) -> tuple[bool, str | None]:
-    """Resend API로 이메일 발송 (HTTPS, Railway 호환)"""
-    import resend
-    resend.api_key = settings.RESEND_API_KEY
-
-    def _send():
-        payload: dict = {
-            "from": from_email,
-            "to": [to_email],
-            "subject": subject,
-            "text": body,
-            "headers": {"Message-ID": message_id},
-        }
-        if reply_to:
-            payload["reply_to"] = [reply_to]
-        return resend.Emails.send(payload)
+    """Resend API로 이메일 발송 (httpx HTTPS, Railway 호환)"""
+    import httpx
+    headers = {
+        "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload: dict = {
+        "from": from_email,
+        "to": [to_email],
+        "subject": subject,
+        "text": body,
+        "headers": {"Message-ID": message_id},
+    }
+    if reply_to:
+        payload["reply_to"] = [reply_to]
 
     try:
-        result = await asyncio.get_event_loop().run_in_executor(None, _send)
-        if result and result.get("id"):
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post("https://api.resend.com/emails", headers=headers, json=payload)
+        if resp.is_success:
+            logger.info("resend_api_success", to=to_email, id=resp.json().get("id"))
             return True, None
-        return False, f"Resend returned no ID: {result}"
+        return False, f"Resend {resp.status_code}: {resp.text[:300]}"
     except Exception as exc:
         return False, str(exc)
 
