@@ -100,34 +100,50 @@ async def _query_gemini_native(
     user_prompt: str,
     timeout: float = 90.0,
 ) -> list[dict]:
-    """Gemini 네이티브 generateContent API 직접 호출"""
+    """Gemini 네이티브 generateContent API 직접 호출 — 모델명 자동 폴백"""
     if not api_key:
         raise ValueError("GEMINI_API_KEY not configured")
 
-    model = "gemini-1.5-flash-latest"
-    url = f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent"
+    models_to_try = [
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
+        "gemini-pro",
+        "gemini-1.0-pro",
+    ]
+    full_prompt = f"{system_prompt}\n\n{user_prompt}\n\nReturn ONLY valid JSON, no markdown."
     payload = {
         "contents": [
-            {"role": "user", "parts": [{"text": f"{system_prompt}\n\n{user_prompt}\n\nReturn ONLY valid JSON, no markdown."}]}
+            {"role": "user", "parts": [{"text": full_prompt}]}
         ],
         "generationConfig": {
             "temperature": 0.2,
             "maxOutputTokens": 8192,
         },
     }
+
+    last_error: Exception | None = None
     async with httpx.AsyncClient(timeout=timeout) as client:
-        resp = await client.post(
-            url,
-            params={"key": api_key},
-            json=payload,
-        )
-        if not resp.is_success:
-            logger.error("gemini_api_error", status=resp.status_code, body=resp.text[:500])
-        resp.raise_for_status()
-        content = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-        result = _extract_manufacturers(content)
-        logger.info("gemini_native_parsed", count=len(result))
-        return result
+        for model in models_to_try:
+            url = f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent"
+            try:
+                resp = await client.post(url, params={"key": api_key}, json=payload)
+                if resp.status_code == 404:
+                    logger.warning("gemini_model_not_found", model=model)
+                    continue
+                if not resp.is_success:
+                    logger.error("gemini_api_error", model=model, status=resp.status_code, body=resp.text[:500])
+                resp.raise_for_status()
+                content = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                result = _extract_manufacturers(content)
+                logger.info("gemini_native_parsed", model=model, count=len(result))
+                return result
+            except httpx.HTTPStatusError:
+                raise
+            except Exception as e:
+                last_error = e
+                continue
+
+    raise last_error or RuntimeError("All Gemini models failed")
 
 
 # ─── Ollama 직접 호출 ──────────────────────────────────────────
