@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     OLLAMA_GPT_MODEL: str = "llama3.2"
 
     # Communication
+    RESEND_API_KEY: str = ""          # Resend.com API key (권장)
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
