@@ -111,12 +111,18 @@ async def send_outreach_email(
 
     reply_to = settings.REPLY_TO_EMAIL or None
 
+    # 테스트 모드: 실제 수신자 대신 지정 주소로 발송
+    actual_to = settings.TEST_EMAIL_OVERRIDE if settings.TEST_EMAIL_OVERRIDE else to_email
+    if settings.TEST_EMAIL_OVERRIDE:
+        subject = f"[TEST→{to_email}] {subject}"
+        logger.info("email_test_override", original_to=to_email, override_to=actual_to)
+
     # Resend 우선 (Railway 호환)
     if settings.RESEND_API_KEY:
-        success, error = await _send_via_resend(to_email, from_email, subject, full_body, final_message_id, reply_to)
+        success, error = await _send_via_resend(actual_to, from_email, subject, full_body, final_message_id, reply_to)
         method = "resend"
     elif settings.SMTP_USER and settings.SMTP_PASSWORD:
-        success, error = await _send_via_smtp(to_email, from_email, subject, full_body, final_message_id, in_reply_to)
+        success, error = await _send_via_smtp(actual_to, from_email, subject, full_body, final_message_id, in_reply_to)
         method = "smtp"
     else:
         return False, "이메일 발송 설정 없음 (RESEND_API_KEY 또는 SMTP 자격증명 필요)"
