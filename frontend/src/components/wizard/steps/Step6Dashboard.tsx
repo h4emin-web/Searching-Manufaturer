@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { CheckCircle2, Clock, XCircle, MessageCircle, Mail, Phone, Globe } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useWizardStore } from '../../../store/wizardStore'
 
 interface DashboardEvent {
@@ -8,106 +8,160 @@ interface DashboardEvent {
   manufacturer?: string
   channel?: string
   message?: string
-  progress?: number
-  total_raw?: number
-  total_dedup?: number
+}
+
+interface LogEntry {
+  id: number
+  type: 'info' | 'action' | 'success' | 'warning'
+  text: string
+  time: string
+}
+
+const LOG_COLORS = {
+  info:    'text-muted-foreground',
+  action:  'text-primary',
+  success: 'text-emerald-500',
+  warning: 'text-amber-500',
+}
+
+function now() {
+  return new Date().toLocaleTimeString('ko-KR', { hour12: false })
 }
 
 export default function Step6Dashboard() {
-  const { session_id, manufacturers } = useWizardStore()
+  const { session_id, manufacturers, step1 } = useWizardStore()
   const [events, setEvents] = useState<DashboardEvent[]>([])
+  const [logs, setLogs] = useState<LogEntry[]>([])
   const [stats, setStats] = useState({ sent: 0, replied: 0, pending: 0, failed: 0 })
   const [connected, setConnected] = useState(false)
+  const [logId, setLogId] = useState(0)
+
+  const active = manufacturers.filter(m => !m.is_excluded)
+
+  const addLog = (type: LogEntry['type'], text: string) => {
+    setLogId(id => {
+      const newId = id + 1
+      setLogs(prev => [...prev, { id: newId, type, text, time: now() }].slice(-30))
+      return newId
+    })
+  }
 
   useEffect(() => {
     const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
+
+    // Initial log
+    addLog('info', `소싱 프로토콜 시작 — ${step1.ingredient_name}`)
+    addLog('action', `${active.length}개 제조소 대상 연락 준비 중...`)
+
     const es = new EventSource(`${API_BASE}/dashboard/${session_id || 'demo'}/stream`)
 
-    es.onopen = () => setConnected(true)
-    es.onerror = () => setConnected(false)
+    es.onopen = () => {
+      setConnected(true)
+      addLog('success', 'SSE 스트림 연결 완료')
+    }
+
+    es.onerror = () => {
+      setConnected(false)
+      addLog('warning', '스트림 연결 재시도 중...')
+    }
 
     es.onmessage = (e) => {
       const event: DashboardEvent = JSON.parse(e.data)
-      setEvents(prev => [event, ...prev].slice(0, 50))  // 최근 50개 유지
+      setEvents(prev => [event, ...prev].slice(0, 50))
 
       if (event.type === 'outreach_sent') {
-        setStats(s => ({ ...s, sent: s.sent + 1, pending: Math.max(0, s.pending - 1) }))
+        setStats(s => ({ ...s, sent: s.sent + 1 }))
+        addLog('action', `${event.manufacturer} — 이메일 발송 완료`)
       } else if (event.type === 'outreach_replied') {
         setStats(s => ({ ...s, replied: s.replied + 1 }))
+        addLog('success', `${event.manufacturer} — 응답 수신!`)
+      } else if (event.type === 'outreach_failed') {
+        setStats(s => ({ ...s, failed: s.failed + 1 }))
+        addLog('warning', `${event.manufacturer} — 발송 실패`)
       }
     }
 
     return () => es.close()
   }, [session_id])
 
-  const activeCount = manufacturers.filter(m => !m.is_excluded).length
-
-  const CHANNEL_ICONS = {
-    wechat: MessageCircle, whatsapp: Phone, email: Mail, web_form: Globe,
-  }
-
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* 연결 상태 */}
-      <div className={`flex items-center gap-2 text-sm ${connected ? 'text-green-600' : 'text-gray-400'}`}>
-        <div className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500 animate-pulse' : 'bg-gray-300'}`} />
-        {connected ? '실시간 모니터링 중' : '연결 시도 중...'}
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="max-w-2xl mx-auto space-y-6 pb-4"
+    >
+      <div className="space-y-2">
+        <div className="text-data text-primary font-mono">소싱 모니터링</div>
+        <h2 className="text-xl font-semibold text-foreground">
+          연락 진행 상황을 실시간으로 확인하세요
+        </h2>
+        <div className="flex items-center gap-2">
+          <div className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-primary animate-pulse-glow' : 'bg-muted-foreground'}`} />
+          <span className="text-data text-muted-foreground font-mono">
+            {connected ? '실시간 모니터링 중' : '연결 시도 중...'}
+          </span>
+        </div>
       </div>
 
-      {/* 핵심 지표 */}
-      <div className="grid grid-cols-4 gap-4">
+      {/* Stats */}
+      <div className="grid grid-cols-4 gap-3">
         {[
-          { label: '전체 대상', value: activeCount, icon: null, color: 'text-gray-900' },
-          { label: '발송 완료', value: stats.sent, icon: CheckCircle2, color: 'text-blue-700' },
-          { label: '응답 수신', value: stats.replied, icon: CheckCircle2, color: 'text-green-700' },
-          { label: '실패', value: stats.failed, icon: XCircle, color: 'text-red-600' },
+          { label: '전체 대상', value: active.length, accent: false },
+          { label: '발송 완료', value: stats.sent,    accent: true },
+          { label: '응답 수신', value: stats.replied,  accent: true },
+          { label: '실패',     value: stats.failed,   accent: false },
         ].map(item => (
-          <div key={item.label} className="bg-white border rounded-xl p-4 text-center">
-            {item.icon && <item.icon className={`mx-auto mb-1 ${item.color}`} size={20} />}
-            <div className={`text-3xl font-bold ${item.color}`}>{item.value}</div>
-            <div className="text-xs text-gray-500">{item.label}</div>
+          <div key={item.label} className="glass-surface rounded-sm p-3 text-center">
+            <div className={`text-2xl font-bold font-mono ${item.accent ? 'text-primary' : 'text-foreground'}`}>
+              {item.value}
+            </div>
+            <div className="text-data text-muted-foreground mt-0.5">{item.label}</div>
           </div>
         ))}
       </div>
 
-      {/* 실시간 이벤트 피드 */}
-      <div className="bg-white border rounded-xl overflow-hidden">
-        <div className="p-4 border-b bg-gray-50">
-          <h3 className="font-semibold text-gray-900">실시간 이벤트</h3>
+      {/* Terminal log */}
+      <div className="glass-surface rounded-sm overflow-hidden">
+        <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/50">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-primary animate-pulse-glow" />
+            <span className="text-data text-muted-foreground font-mono">agent.log</span>
+          </div>
+          <span className="text-data text-muted-foreground font-mono">{logs.length} entries</span>
         </div>
-        <div className="divide-y max-h-80 overflow-y-auto">
-          {events.length === 0 ? (
-            <div className="p-6 text-center text-gray-400 text-sm">이벤트 대기 중...</div>
-          ) : events.map((ev, i) => {
-            const Icon = ev.channel ? CHANNEL_ICONS[ev.channel as keyof typeof CHANNEL_ICONS] : Clock
-            return (
-              <div key={i} className="flex items-center gap-3 p-3 text-sm">
-                {Icon && <Icon size={16} className="text-gray-400 flex-shrink-0" />}
-                <div className="flex-1">
-                  {ev.manufacturer && <span className="font-medium text-gray-900">{ev.manufacturer}</span>}
-                  {ev.message && <span className="text-gray-500 ml-2">{ev.message}</span>}
-                  {ev.type === 'outreach_replied' && (
-                    <span className="ml-2 text-green-600 font-medium">응답 수신!</span>
-                  )}
-                </div>
-                {ev.channel && (
-                  <span className="text-xs text-gray-400 capitalize">{ev.channel}</span>
-                )}
-              </div>
-            )
-          })}
+
+        <div className="p-4 h-72 overflow-y-auto space-y-1 font-mono">
+          <AnimatePresence>
+            {logs.map(log => (
+              <motion.div
+                key={log.id}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.2 }}
+                className="flex items-start gap-3"
+              >
+                <span className="text-data text-muted-foreground/50 flex-shrink-0 tabular-nums">{log.time}</span>
+                <span className={`text-data ${LOG_COLORS[log.type]} flex-1`}>{log.text}</span>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+          {/* Blinking cursor */}
+          <div className="flex items-center gap-3">
+            <span className="text-data text-muted-foreground/50">{now()}</span>
+            <span className="inline-block w-2 h-3.5 bg-primary animate-terminal-blink" />
+          </div>
         </div>
       </div>
 
-      {/* 내보내기 */}
+      {/* Export buttons */}
       <div className="flex gap-3">
-        <button className="flex-1 border border-gray-300 rounded-xl py-3 text-sm text-gray-700 hover:bg-gray-50 font-medium">
+        <button className="flex-1 glass-surface hover:glass-surface-hover rounded-sm py-2.5 text-ui text-muted-foreground hover:text-foreground transition-colors">
           Excel 내보내기
         </button>
-        <button className="flex-1 border border-gray-300 rounded-xl py-3 text-sm text-gray-700 hover:bg-gray-50 font-medium">
+        <button className="flex-1 glass-surface hover:glass-surface-hover rounded-sm py-2.5 text-ui text-muted-foreground hover:text-foreground transition-colors">
           보고서 생성
         </button>
       </div>
-    </div>
+    </motion.div>
   )
 }

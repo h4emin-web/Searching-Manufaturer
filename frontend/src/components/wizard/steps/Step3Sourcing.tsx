@@ -1,17 +1,26 @@
 'use client'
 import { useEffect, useRef } from 'react'
-import { Bot, CheckCircle2, XCircle, Loader2, ArrowRight, Cpu } from 'lucide-react'
+import { motion } from 'framer-motion'
 import { useWizardStore, LLMProvider } from '../../../store/wizardStore'
 import axios from 'axios'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'
 
-const LLM_INFO: Record<LLMProvider, { name: string; desc: string; color: string; bg: string; border: string }> = {
-  gpt4o:    { name: 'GPT-4o',    desc: 'OpenAI',   color: 'text-emerald-700', bg: 'bg-emerald-50',  border: 'border-emerald-200' },
-  gemini:   { name: 'Gemini',    desc: 'Google',   color: 'text-blue-700',    bg: 'bg-blue-50',     border: 'border-blue-200' },
-  deepseek: { name: 'DeepSeek',  desc: 'DeepSeek', color: 'text-violet-700',  bg: 'bg-violet-50',   border: 'border-violet-200' },
-  qwen:     { name: 'Qwen',      desc: 'Alibaba',  color: 'text-orange-700',  bg: 'bg-orange-50',   border: 'border-orange-200' },
+const LLM_INFO: Record<LLMProvider, { name: string; desc: string }> = {
+  gpt4o:    { name: 'GPT-4o',   desc: 'OpenAI' },
+  gemini:   { name: 'Gemini',   desc: 'Google' },
+  deepseek: { name: 'DeepSeek', desc: 'DeepSeek' },
+  qwen:     { name: 'Qwen',     desc: 'Alibaba' },
 }
+
+const REGIONS = [
+  { id: 'china',  flag: '🇨🇳', name: '중국', count: '2,400+', desc: '가격 경쟁력' },
+  { id: 'india',  flag: '🇮🇳', name: '인도', count: '1,800+', desc: 'WHO-GMP 인증' },
+  { id: 'europe', flag: '🇪🇺', name: '유럽', count: '600+',   desc: '고품질' },
+  { id: 'usa',    flag: '🇺🇸', name: '미국', count: '350+',   desc: 'FDA 등록' },
+  { id: 'korea',  flag: '🇰🇷', name: '국내', count: '120+',   desc: '빠른 납기' },
+  { id: 'other',  flag: '🌏', name: '기타', count: '500+',   desc: '기타 지역' },
+]
 
 export default function Step3Sourcing() {
   const { step1, step2, step3, updateStep3, setManufacturers, markStepComplete, goToStep } = useWizardStore()
@@ -57,109 +66,183 @@ export default function Step3Sourcing() {
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current) }, [])
 
-  const allLLMs = Object.keys(LLM_INFO) as LLMProvider[]
+  const allLLMs: LLMProvider[] = ['gemini', 'qwen']
 
-  return (
-    <div className="space-y-6">
-      {/* 검색 대상 */}
-      <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl border border-gray-100">
-        <div className="w-9 h-9 bg-indigo-100 rounded-lg flex items-center justify-center flex-shrink-0">
-          <Cpu size={16} className="text-indigo-600" />
+  if (step3.sourcing_status === 'idle') {
+    return (
+      <motion.div
+        initial={{ opacity: 0, x: 40 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}
+        className="max-w-xl mx-auto space-y-6"
+      >
+        <div className="space-y-2">
+          <div className="text-data text-primary font-mono">STEP 3/5 — AI 제조소 검색</div>
+          <h2 className="text-xl font-semibold text-foreground">
+            <span className="text-primary">{step1.ingredient_name}</span> 제조소를 탐색합니다
+          </h2>
+          <p className="text-muted-foreground text-ui">
+            Gemini와 Qwen이 전 세계 제조소를 병렬로 검색하고 결과를 통합합니다.
+          </p>
         </div>
-        <div>
-          <div className="font-semibold text-gray-900 text-sm">{step1.ingredient_name}</div>
-          <div className="text-xs text-gray-500 mt-0.5">
-            {step1.use_case === 'pharmaceutical' ? '의약품' : step1.use_case}
-            {step2.selections.filter(s => s.is_selected).length > 0 && (
-              <> · {step2.selections.filter(s => s.is_selected).map(s => s.requirement_id).join(', ')}</>
-            )}
+
+        {/* Region display */}
+        <div className="grid grid-cols-3 gap-2">
+          {REGIONS.map((r, i) => (
+            <motion.div
+              key={r.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.05, duration: 0.3 }}
+              className="glass-surface rounded-sm p-3 text-center"
+            >
+              <div className="text-lg mb-1">{r.flag}</div>
+              <div className="text-data font-semibold text-foreground">{r.name}</div>
+              <div className="text-data text-primary font-mono">{r.count}</div>
+              <div className="text-data text-muted-foreground">{r.desc}</div>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* AI engines */}
+        <div className="glass-surface rounded-sm p-4 space-y-3">
+          <div className="text-data text-muted-foreground font-mono">사용 AI 엔진</div>
+          <div className="flex gap-3">
+            {allLLMs.map(provider => (
+              <div key={provider} className="flex items-center gap-2">
+                <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse-glow" />
+                <span className="text-ui font-semibold text-foreground">{LLM_INFO[provider].name}</span>
+                <span className="text-data text-muted-foreground">{LLM_INFO[provider].desc}</span>
+              </div>
+            ))}
           </div>
         </div>
-      </div>
 
-      {/* LLM 카드 */}
-      <div className="grid grid-cols-2 gap-3">
-        {allLLMs.map(provider => {
-          const info = LLM_INFO[provider]
-          const status = step3.llm_progress[provider]
-          return (
-            <div key={provider} className={`border rounded-xl p-4 ${info.bg} ${info.border}`}>
-              <div className="flex items-center justify-between mb-1">
-                <div className={`font-semibold text-sm ${info.color}`}>{info.name}</div>
-                {status === 'pending' && <div className="w-2 h-2 rounded-full bg-gray-300" />}
-                {status === 'running' && <Loader2 className="animate-spin text-gray-400" size={14} />}
-                {status === 'done' && <CheckCircle2 className="text-emerald-500" size={14} />}
-                {status === 'failed' && <XCircle className="text-red-400" size={14} />}
-              </div>
-              <div className={`text-xs ${info.color} opacity-60`}>
-                {info.desc} ·{' '}
-                {status === 'pending' ? '대기 중' : status === 'running' ? '검색 중...' : status === 'done' ? '완료' : '실패'}
-              </div>
-            </div>
-          )
-        })}
-      </div>
+        <button
+          onClick={startSourcing}
+          className="w-full bg-primary text-primary-foreground px-6 py-3.5 rounded-sm font-semibold text-ui hover:opacity-90 transition-opacity"
+        >
+          🚀 AI 제조소 검색 시작
+        </button>
+      </motion.div>
+    )
+  }
 
-      {/* 진행 바 */}
-      {step3.sourcing_status === 'running' && (
-        <div>
-          <div className="flex justify-between text-xs text-gray-500 mb-2">
+  if (step3.sourcing_status === 'running') {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="max-w-xl mx-auto space-y-6"
+      >
+        <div className="space-y-2">
+          <div className="text-data text-primary font-mono">STEP 3/5 — AI 제조소 검색</div>
+          <h2 className="text-xl font-semibold text-foreground">제조소 탐색 중...</h2>
+        </div>
+
+        {/* LLM status */}
+        <div className="space-y-2">
+          {allLLMs.map(provider => {
+            const status = step3.llm_progress[provider]
+            return (
+              <div key={provider} className="glass-surface rounded-sm p-4 flex items-center justify-between">
+                <div>
+                  <div className="font-semibold text-foreground">{LLM_INFO[provider].name}</div>
+                  <div className="text-data text-muted-foreground">{LLM_INFO[provider].desc}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {status === 'running' && (
+                    <>
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse-glow" />
+                      <span className="text-data text-primary font-mono">검색 중...</span>
+                    </>
+                  )}
+                  {status === 'done' && (
+                    <>
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                      <span className="text-data text-primary font-mono">완료</span>
+                    </>
+                  )}
+                  {status === 'pending' && (
+                    <span className="text-data text-muted-foreground font-mono">대기 중</span>
+                  )}
+                  {status === 'failed' && (
+                    <span className="text-data text-destructive font-mono">실패</span>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Progress */}
+        <div className="space-y-2">
+          <div className="flex justify-between text-data text-muted-foreground font-mono">
             <span>제조소 검색 중...</span>
             <span>{step3.progress}%</span>
           </div>
-          <div className="w-full bg-gray-100 rounded-full h-2">
-            <div className="bg-indigo-600 h-2 rounded-full transition-all duration-500" style={{ width: `${step3.progress}%` }} />
+          <div className="h-[2px] bg-secondary rounded-full overflow-hidden">
+            <motion.div
+              className="h-full bg-primary rounded-full"
+              animate={{ width: `${step3.progress}%` }}
+              transition={{ duration: 0.5 }}
+            />
+          </div>
+          <div className="relative h-8 overflow-hidden rounded-sm bg-secondary/50">
+            <div className="scanning-line h-full w-full" />
           </div>
         </div>
-      )}
+      </motion.div>
+    )
+  }
 
-      {/* 완료 */}
-      {step3.sourcing_status === 'completed' && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <CheckCircle2 className="text-emerald-600" size={18} />
-            <span className="font-semibold text-emerald-800 text-sm">검색 완료</span>
-          </div>
-          <div className="grid grid-cols-3 gap-4 text-center mb-4">
-            <div>
-              <div className="text-2xl font-bold text-gray-900">{step3.total_raw}</div>
-              <div className="text-xs text-gray-500 mt-0.5">총 검색 결과</div>
-            </div>
-            <div className="flex items-center justify-center">
-              <ArrowRight className="text-gray-300" size={20} />
-            </div>
-            <div>
-              <div className="text-2xl font-bold text-indigo-600">{step3.total_deduplicated}</div>
-              <div className="text-xs text-gray-500 mt-0.5">중복 제거 후</div>
-            </div>
-          </div>
-          <button
-            onClick={() => { markStepComplete(3); goToStep(4) }}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2.5 rounded-xl font-medium text-sm flex items-center justify-center gap-2 transition-colors"
-          >
-            다음 단계: 제조소 검토
-            <ArrowRight size={14} />
-          </button>
+  if (step3.sourcing_status === 'completed') {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="max-w-xl mx-auto space-y-6"
+      >
+        <div className="space-y-2">
+          <div className="text-data text-primary font-mono">STEP 3/5 — AI 제조소 검색</div>
+          <h2 className="text-xl font-semibold text-foreground">탐색 완료</h2>
         </div>
-      )}
 
-      {/* 시작 버튼 */}
-      {step3.sourcing_status === 'idle' && (
+        <div className="glass-surface rounded-sm p-6 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-2 h-2 rounded-full bg-primary" />
+            <span className="font-semibold text-foreground">검색 결과</span>
+          </div>
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div>
+              <div className="text-3xl font-bold text-foreground font-mono">{step3.total_raw}</div>
+              <div className="text-data text-muted-foreground mt-1">총 검색 결과</div>
+            </div>
+            <div className="flex items-center justify-center text-muted-foreground text-lg">→</div>
+            <div>
+              <div className="text-3xl font-bold text-primary font-mono">{step3.total_deduplicated}</div>
+              <div className="text-data text-muted-foreground mt-1">중복 제거 후</div>
+            </div>
+          </div>
+        </div>
+
         <button
-          onClick={startSourcing}
-          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3.5 rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors text-sm"
+          onClick={() => { markStepComplete(3); goToStep(4) }}
+          className="w-full bg-primary text-primary-foreground px-6 py-3 rounded-sm font-semibold text-ui hover:opacity-90 transition-opacity"
         >
-          <Bot size={18} />
-          AI 제조소 검색 시작
+          제조소 검토하기 →
         </button>
-      )}
+      </motion.div>
+    )
+  }
 
-      {step3.sourcing_status === 'failed' && (
-        <div className="text-center py-4">
-          <p className="text-red-600 text-sm mb-3">검색 중 오류가 발생했습니다.</p>
-          <button onClick={startSourcing} className="text-indigo-600 text-sm underline">다시 시도</button>
-        </div>
-      )}
+  return (
+    <div className="max-w-xl mx-auto space-y-4 text-center py-12">
+      <p className="text-destructive text-ui">검색 중 오류가 발생했습니다.</p>
+      <button onClick={startSourcing} className="text-data text-primary hover:underline">
+        다시 시도
+      </button>
     </div>
   )
 }

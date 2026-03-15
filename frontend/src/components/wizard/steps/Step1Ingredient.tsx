@@ -1,163 +1,140 @@
 'use client'
 import { useState } from 'react'
-import { Pill, ChevronRight, FlaskConical, Leaf, Sparkles } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Search } from 'lucide-react'
 import { useWizardStore, UseCase } from '../../../store/wizardStore'
 
-const USE_CASES: { value: UseCase; label: string; icon: React.ReactNode; desc: string; color: string }[] = [
-  {
-    value: 'pharmaceutical',
-    label: '의약품',
-    icon: <Pill size={18} />,
-    desc: 'WHO-GMP, KDMF, CoPP 등 규제 요건 확인',
-    color: 'indigo',
-  },
-  {
-    value: 'cosmetic',
-    label: '화장품',
-    icon: <Sparkles size={18} />,
-    desc: 'ISO 22716, COSMOS 등 인증 기준 적용',
-    color: 'pink',
-  },
-  {
-    value: 'food',
-    label: '식품',
-    icon: <Leaf size={18} />,
-    desc: 'HACCP, 식품위생법 기준 적용',
-    color: 'emerald',
-  },
+const USE_CASES: { value: UseCase; emoji: string; label: string; desc: string }[] = [
+  { value: 'pharmaceutical', emoji: '💊', label: '의약품', desc: 'WHO-GMP, KDMF, WC, CoPP 등 규제 요건 충족 필요' },
+  { value: 'cosmetic',       emoji: '✨', label: '화장품', desc: 'ISO 22716, COSMOS 등 인증 기준 적용' },
+  { value: 'food',           emoji: '🌿', label: '식품',   desc: 'HACCP, 식품위생법 기준 적용' },
 ]
-
-const COLOR_MAP = {
-  indigo: {
-    selected: 'border-indigo-500 bg-indigo-50',
-    icon: 'bg-indigo-100 text-indigo-600',
-    dot: 'bg-indigo-500',
-  },
-  pink: {
-    selected: 'border-pink-400 bg-pink-50',
-    icon: 'bg-pink-100 text-pink-600',
-    dot: 'bg-pink-400',
-  },
-  emerald: {
-    selected: 'border-emerald-400 bg-emerald-50',
-    icon: 'bg-emerald-100 text-emerald-600',
-    dot: 'bg-emerald-400',
-  },
-}
 
 export default function Step1Ingredient() {
   const { step1, updateStep1, markStepComplete, goToStep } = useWizardStore()
+  const [phase, setPhase] = useState<'search' | 'purpose'>(step1.ingredient_name ? 'purpose' : 'search')
+  const [query, setQuery] = useState(step1.ingredient_name)
   const [touched, setTouched] = useState(false)
 
-  const isValid = step1.ingredient_name.trim().length >= 2 && step1.use_case !== null
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!query.trim()) return
+    updateStep1({ ingredient_name: query.trim() })
+    setPhase('purpose')
+  }
 
-  const handleNext = () => {
-    if (!isValid) { setTouched(true); return }
+  const handleSelectPurpose = (uc: UseCase) => {
+    updateStep1({ use_case: uc })
     markStepComplete(1)
     goToStep(2)
   }
 
   return (
-    <form className="space-y-7" onSubmit={e => { e.preventDefault(); handleNext() }} noValidate>
+    <AnimatePresence mode="wait">
+      {phase === 'search' ? (
+        <motion.div
+          key="search"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          transition={{ duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}
+          className="flex flex-col items-center justify-center min-h-[60vh] gap-8"
+        >
+          <div className="text-center space-y-3">
+            <div className="text-data text-muted-foreground tracking-widest uppercase font-mono">
+              API Sourcing Command Center
+            </div>
+            <h1 className="text-2xl font-semibold text-foreground tracking-tight">
+              원료 의약품 소싱 에이전트
+            </h1>
+            <p className="text-muted-foreground max-w-md text-ui">
+              원료명을 입력하면 AI 에이전트가 글로벌 제조소 탐색부터 견적 확보까지 전 과정을 자동으로 수행합니다.
+            </p>
+          </div>
 
-      {/* 원료명 */}
-      <div className="space-y-2">
-        <label htmlFor="ingredient_name" className="block text-sm font-medium text-gray-700">
-          원료명 <span className="text-red-500">*</span>
-        </label>
-        <div className="relative">
-          <Pill className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
-          <input
-            id="ingredient_name"
-            type="text"
-            value={step1.ingredient_name}
-            onChange={e => updateStep1({ ingredient_name: e.target.value })}
-            onBlur={() => setTouched(true)}
-            placeholder="예: Ibuprofen, Metformin HCl, Ascorbic Acid"
-            autoComplete="off"
-            className={`w-full pl-10 pr-4 py-2.5 border rounded-xl text-sm bg-white text-gray-900 placeholder-gray-400 outline-none transition-all
-              focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500
-              ${touched && !step1.ingredient_name.trim() ? 'border-red-400 bg-red-50' : 'border-gray-200 hover:border-gray-300'}`}
-          />
-        </div>
+          <form onSubmit={handleSearch} className="w-full max-w-xl">
+            <div className="relative glass-surface rounded-sm group focus-within:glow-primary transition-shadow duration-300">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="원료 의약품명을 입력하세요 (예: Ibuprofen, Metformin HCl)"
+                className="w-full bg-transparent pl-11 pr-4 py-3.5 text-foreground placeholder:text-muted-foreground focus:outline-none text-ui"
+                autoFocus
+              />
+              <div className="absolute bottom-0 left-0 right-0 h-[1px] overflow-hidden">
+                <div className="scanning-line h-full w-full" />
+              </div>
+            </div>
+            <div className="mt-3 space-y-2">
+              <input
+                type="text"
+                value={step1.cas_number || ''}
+                onChange={(e) => updateStep1({ cas_number: e.target.value })}
+                placeholder="CAS No. (선택 입력)"
+                className="w-full glass-surface rounded-sm px-4 py-2.5 text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary text-ui bg-transparent"
+              />
+            </div>
+          </form>
+        </motion.div>
+      ) : (
+        <motion.div
+          key="purpose"
+          initial={{ opacity: 0, x: 40 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -40 }}
+          transition={{ duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}
+          className="max-w-xl mx-auto space-y-6"
+        >
+          <div className="space-y-2">
+            <div className="text-data text-primary font-mono">STEP 1/5 — 용도 선택</div>
+            <h2 className="text-xl font-semibold text-foreground">
+              <span className="text-primary">{step1.ingredient_name}</span>의 용도를 선택하세요
+            </h2>
+            <p className="text-muted-foreground text-ui">용도에 따라 적용되는 규제 요건이 달라집니다.</p>
+          </div>
 
-        <div>
-          <label htmlFor="cas_number" className="sr-only">CAS 번호</label>
-          <input
-            id="cas_number"
-            type="text"
-            value={step1.cas_number || ''}
-            onChange={e => updateStep1({ cas_number: e.target.value })}
-            placeholder="CAS No. (선택 입력)"
-            className="w-full px-3.5 py-2 border border-gray-200 rounded-xl text-sm text-gray-700 placeholder-gray-400 outline-none hover:border-gray-300 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-          />
-        </div>
-        {touched && !step1.ingredient_name.trim() && (
-          <p className="text-red-500 text-xs mt-1">원료명을 입력해주세요.</p>
-        )}
-      </div>
-
-      {/* 용도 선택 */}
-      <div className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700">
-          용도 <span className="text-red-500">*</span>
-        </label>
-        <div className="grid grid-cols-3 gap-3">
-          {USE_CASES.map(uc => {
-            const colors = COLOR_MAP[uc.color as keyof typeof COLOR_MAP]
-            const isSelected = step1.use_case === uc.value
-            return (
-              <button
+          <div className="space-y-2">
+            {USE_CASES.map((uc, i) => (
+              <motion.button
                 key={uc.value}
-                type="button"
-                onClick={() => updateStep1({ use_case: uc.value })}
-                className={`relative flex flex-col items-start gap-2 p-4 border-2 rounded-xl text-left transition-all outline-none
-                  focus-visible:ring-2 focus-visible:ring-indigo-500
-                  ${isSelected ? colors.selected : 'border-gray-200 bg-white hover:border-gray-300'}`}
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.08, duration: 0.3 }}
+                onClick={() => handleSelectPurpose(uc.value)}
+                className="w-full glass-surface hover:glass-surface-hover rounded-sm p-4 text-left transition-all duration-200 hover:glow-primary group"
               >
-                <div className={`p-2 rounded-lg ${isSelected ? colors.icon : 'bg-gray-100 text-gray-500'}`}>
-                  {uc.icon}
+                <div className="flex items-center gap-3">
+                  <span className="text-xl">{uc.emoji}</span>
+                  <div>
+                    <div className="font-semibold text-foreground group-hover:text-primary transition-colors">{uc.label}</div>
+                    <div className="text-data text-muted-foreground mt-0.5">{uc.desc}</div>
+                  </div>
                 </div>
-                <div>
-                  <div className="font-semibold text-gray-900 text-sm">{uc.label}</div>
-                  <div className="text-xs text-gray-500 mt-0.5 leading-relaxed">{uc.desc}</div>
-                </div>
-                {isSelected && (
-                  <div className={`absolute top-3 right-3 w-2 h-2 rounded-full ${colors.dot}`} />
-                )}
-              </button>
-            )
-          })}
-        </div>
-        {touched && !step1.use_case && (
-          <p className="text-red-500 text-xs mt-1">용도를 선택해주세요.</p>
-        )}
-      </div>
+              </motion.button>
+            ))}
+          </div>
 
-      {/* 소싱 참고사항 */}
-      <div className="space-y-2">
-        <label htmlFor="sourcing_notes" className="block text-sm font-medium text-gray-700">
-          소싱 참고사항
-          <span className="ml-1.5 text-xs text-gray-400 font-normal">선택</span>
-        </label>
-        <p className="text-xs text-gray-500">사용 목적, 주의사항, 특별 요구사항 등 AI가 참고할 내용을 입력하세요.</p>
-        <textarea
-          id="sourcing_notes"
-          rows={3}
-          value={step1.sourcing_notes || ''}
-          onChange={e => updateStep1({ sourcing_notes: e.target.value })}
-          placeholder="예: 완제품 A의 원료로 사용 예정. 입자 크기 D90 < 50μm 필요. 연간 수요 약 500kg. 중국산 제외 희망."
-          className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-800 placeholder-gray-400 outline-none resize-none hover:border-gray-300 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
-        />
-      </div>
+          <div className="space-y-2">
+            <label className="text-data text-muted-foreground font-mono">소싱 참고사항 (선택)</label>
+            <textarea
+              rows={3}
+              value={step1.sourcing_notes || ''}
+              onChange={(e) => updateStep1({ sourcing_notes: e.target.value })}
+              placeholder="예: 입자 크기 D90 < 50μm, 연간 수요 500kg, 중국산 제외 희망"
+              className="w-full glass-surface rounded-sm px-4 py-2.5 text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-primary text-ui bg-transparent resize-none"
+            />
+          </div>
 
-      <button
-        type="submit"
-        className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold py-3 rounded-xl transition-colors text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
-      >
-        다음 단계
-        <ChevronRight size={16} />
-      </button>
-    </form>
+          <button
+            onClick={() => { setQuery(''); setPhase('search') }}
+            className="text-data text-muted-foreground hover:text-foreground transition-colors"
+          >
+            ← 원료명 다시 입력
+          </button>
+        </motion.div>
+      )}
+    </AnimatePresence>
   )
 }
