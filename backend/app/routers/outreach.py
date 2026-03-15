@@ -129,6 +129,8 @@ async def _process_one_manufacturer(plan_id: str, idx: int, item: dict, req: Sim
             body_en=body,
             ingredient=req.ingredient,
             country=item["country"],
+            plan_id=plan_id,
+            manufacturer_id=item["id"],
         )
         if success:
             items[idx]["status"] = "sent"

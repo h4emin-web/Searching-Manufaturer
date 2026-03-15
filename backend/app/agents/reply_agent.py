@@ -1,132 +1,209 @@
 """
-이메일 자동 답변 생성 에이전트 (Gemini 기반)
-- 제조원 국가에 맞는 단일 언어로만 답변
-- CIF Sea / CIP Air 기준 가격 요청
+이메일 자동 답변 에이전트 (Gemini httpx 직접 호출)
+- 답장 분석: 누락 항목 체크, 제조원 질문 파악
+- AI 판단 불가 → 에스컬레이션 플래그
+- 국가별 언어로 응답 생성
 """
-from pydantic import BaseModel
-from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIModel
+import httpx
+import json
+import re
+import structlog
 
 from ..config import get_settings
 from ..services.thread_store import EmailThread
 
 settings = get_settings()
+logger = structlog.get_logger()
 
-
-# ─── 국가 → 언어 매핑 ──────────────────────────────────────
 _COUNTRY_LANGUAGE: dict[str, str] = {
-    "China":        "zh",
-    "Taiwan":       "zh",
-    "Hong Kong":    "zh",
-    "Korea":        "ko",
-    "South Korea":  "ko",
+    "China": "Chinese (Simplified, 简体中文)",
+    "Taiwan": "Chinese (Traditional, 繁體中文)",
+    "Hong Kong": "Chinese (Traditional, 繁體中文)",
+    "Japan": "Japanese (日本語)",
+    "Germany": "German (Deutsch)",
+    "France": "French (Français)",
+    "Italy": "Italian (Italiano)",
+    "Spain": "Spanish (Español)",
 }
 
-_LANGUAGE_NAMES: dict[str, str] = {
-    "zh": "Chinese (Simplified, 简体中文)",
-    "ko": "Korean (한국어)",
-    "en": "English",
-    "ja": "Japanese (日本語)",
-    "de": "German (Deutsch)",
-    "fr": "French (Français)",
-    "it": "Italian (Italiano)",
-    "es": "Spanish (Español)",
-}
+# 초기 발송에서 요청한 필수 항목들
+REQUIRED_ITEMS = [
+    "product_available",   # 제품 공급 가능 여부
+    "certifications",      # COA / GMP 인증서
+    "pricing_cif",         # CIF Busan 가격
+    "sample",              # 무상 샘플
+]
 
-# 유럽 주요국 → 해당 언어
-_EUROPEAN: dict[str, str] = {
-    "Germany":      "de",
-    "France":       "fr",
-    "Italy":        "it",
-    "Spain":        "es",
-    "Japan":        "ja",
+ITEM_LABELS = {
+    "product_available": "제품 공급 가능 여부",
+    "certifications": "COA/GMP 인증서",
+    "pricing_cif": "CIF Busan 가격",
+    "sample": "무상 샘플 가능 여부",
 }
 
 
-def get_email_language(country: str) -> str:
-    if not country:
-        return "en"
-    c = country.strip()
-    if c in _COUNTRY_LANGUAGE:
-        return _COUNTRY_LANGUAGE[c]
-    if c in _EUROPEAN:
-        return _EUROPEAN[c]
-    return "en"
-
-
-class ReplyContent(BaseModel):
-    subject: str    # 제목 (Re: 포함)
-    body: str       # 해당 국가 언어 본문만
-    language: str   # "en" / "ko" / "zh" / "ja" / "de" 등
-    reasoning: str  # AI 판단 근거 (내부 로깅용)
-
-
-_REPLY_SYSTEM_PROMPT = """
-You are a professional pharmaceutical procurement specialist at a Korean pharmaceutical company.
-You manage email correspondence with manufacturers regarding API/excipient sourcing inquiries.
-
-PRICING RULE (CRITICAL):
-- Always request prices on CIF Sea (Cost, Insurance, Freight) basis to Busan Port, South Korea
-- For urgent/air shipment, request CIP Air (Carriage and Insurance Paid) basis to Incheon Airport, South Korea
-
-YOUR ROLE:
-- Respond professionally and courteously to manufacturer replies
-- Push toward concrete next steps: samples, COA/DMF/CoPP documents, price quotes, or call scheduling
-- Acknowledge what the manufacturer said, then ask relevant follow-up questions
-- If they cannot supply, thank them gracefully and close the conversation
-- Keep replies concise (5-10 sentences max)
-
-LANGUAGE RULE (CRITICAL):
-- Write the reply ONLY in the language specified in the prompt
-- Do NOT mix languages in the body field
-"""
+def _get_language(country: str) -> str:
+    for key, lang in _COUNTRY_LANGUAGE.items():
+        if key.lower() in country.lower():
+            return lang
+    return "English"
 
 
 def _build_conversation_text(thread: EmailThread) -> str:
     lines = []
     for msg in thread.conversation:
-        role_label = "Our email" if msg["role"] == "us" else f"Reply from {thread.manufacturer_name}"
-        lines.append(f"[{role_label}]\n{msg['body']}")
+        label = "Our email" if msg["role"] == "us" else f"Reply from {thread.manufacturer_name}"
+        lines.append(f"[{label}]\n{msg['body']}")
     return "\n\n---\n\n".join(lines)
 
 
-async def generate_reply(thread: EmailThread) -> ReplyContent:
-    """대화 히스토리 + 국가 기반으로 단일 언어 후속 답변 생성"""
-    lang_code = get_email_language(thread.country)
-    lang_name = _LANGUAGE_NAMES.get(lang_code, "English")
+async def analyze_and_reply(thread: EmailThread) -> dict:
+    """
+    답장 분석 + 응답 생성
+    Returns:
+      {
+        "needs_reply": bool,
+        "needs_human": bool,
+        "human_questions": list[str],   # 요청자가 답해야 할 질문
+        "missing_items": list[str],     # 아직 답 안 온 항목 (한국어)
+        "subject": str,
+        "body": str,
+        "language": str,
+      }
+    """
+    api_key = settings.GEMINI_API_KEY
+    if not api_key:
+        return {"needs_reply": False, "needs_human": False, "human_questions": [], "missing_items": [], "subject": "", "body": "", "language": "en"}
 
-    model = OpenAIModel(
-        "gemini-2.5-flash",
-        base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-        api_key=settings.GEMINI_API_KEY,
-    )
-    agent = Agent(
-        model=model,
-        result_type=ReplyContent,
-        system_prompt=_REPLY_SYSTEM_PROMPT,
-        retries=2,
-    )
+    language = _get_language(thread.country)
+    conversation = _build_conversation_text(thread)
 
-    conversation_text = _build_conversation_text(thread)
-    prompt = f"""
-Sourcing ingredient: **{thread.ingredient}**
-Manufacturer: {thread.manufacturer_name} ({thread.country or "Unknown country"})
-Their email: {thread.to_email}
+    prompt = f"""You are a pharmaceutical procurement specialist at a Korean pharma company.
+Analyze the latest manufacturer reply and generate an appropriate response.
 
-LANGUAGE TO USE: {lang_name} (language code: {lang_code})
-Write the entire body field in {lang_name} ONLY.
+Ingredient: {thread.ingredient}
+Manufacturer: {thread.manufacturer_name} ({thread.country})
+Language to use in reply: {language}
 
-If asking about price, always request:
-- CIF Sea basis to Busan Port (부산항), South Korea
-- CIP Air basis to Incheon Airport (인천공항), South Korea (if air freight applicable)
+Required items we originally asked for:
+1. Product availability confirmation
+2. COA and GMP certifications
+3. Pricing (CIF Busan Port, South Korea)
+4. Free sample availability
 
-Full conversation so far:
-{conversation_text}
+Full conversation:
+{conversation}
 
-Generate the next reply. Subject should start with "Re: ".
-Original subject: {thread.subject}
-Set language field to: {lang_code}
-"""
+Analyze the latest manufacturer reply and respond with ONLY valid JSON:
+{{
+  "product_available": true/false/null,   // null = not mentioned
+  "certifications": true/false/null,
+  "pricing_cif": true/false/null,
+  "sample": true/false/null,
+  "manufacturer_questions": [],           // questions the manufacturer asked us
+  "ai_can_answer": [],                    // questions AI can answer (general pharma/logistics)
+  "needs_human": [],                      // questions requiring the requester's specific company info
+  "supplier_cannot_supply": false,        // true if they explicitly said they can't supply
+  "needs_reply": true,                    // false only if conversation is complete
+  "reply_subject": "Re: ...",
+  "reply_body": "..."                     // write in {language}, professional, concise
+}}
 
-    result = await agent.run(prompt.strip())
-    return result.data
+For reply_body:
+- Thank them for the reply
+- Ask specifically about missing items only (don't re-ask answered items)
+- Answer any manufacturer questions if ai_can_answer is not empty
+- If supplier_cannot_supply: write a polite closing email, no follow-up needed
+- Keep it under 150 words"""
+
+    headers = {"Content-Type": "application/json", "X-goog-api-key": api_key}
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 1024},
+    }
+
+    models = ["gemini-flash-latest", "gemini-2.0-flash-lite", "gemini-1.5-flash-001"]
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        for model in models:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+            try:
+                resp = await client.post(url, headers=headers, json=payload)
+                if not resp.is_success:
+                    continue
+                text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                text = re.sub(r"```(?:json)?\s*", "", text).strip().rstrip("`").strip()
+                m = re.search(r"\{[\s\S]*\}", text)
+                if not m:
+                    continue
+                data = json.loads(m.group())
+
+                missing = [
+                    ITEM_LABELS[k]
+                    for k in REQUIRED_ITEMS
+                    if data.get(k) is None or data.get(k) is False
+                ]
+
+                logger.info("reply_analyzed", manufacturer=thread.manufacturer_name,
+                            missing=missing, needs_human=bool(data.get("needs_human")))
+
+                return {
+                    "needs_reply": data.get("needs_reply", True) and not data.get("supplier_cannot_supply", False),
+                    "supplier_cannot_supply": data.get("supplier_cannot_supply", False),
+                    "needs_human": bool(data.get("needs_human")),
+                    "human_questions": data.get("needs_human", []),
+                    "missing_items": missing,
+                    "subject": data.get("reply_subject", f"Re: {thread.subject}"),
+                    "body": data.get("reply_body", ""),
+                    "language": language,
+                }
+            except Exception as e:
+                logger.warning("reply_agent_model_failed", model=model, error=str(e))
+                continue
+
+    return {"needs_reply": False, "needs_human": False, "human_questions": [], "missing_items": [], "subject": "", "body": "", "language": "en"}
+
+
+async def generate_followup_email(thread: EmailThread, follow_up_num: int) -> dict:
+    """24시간 무응답 팔로업 이메일 생성"""
+    api_key = settings.GEMINI_API_KEY
+    if not api_key:
+        return {"subject": "", "body": ""}
+
+    language = _get_language(thread.country)
+    original_email = thread.conversation[0]["body"] if thread.conversation else ""
+
+    prompt = f"""Write a brief follow-up email in {language}.
+
+Manufacturer: {thread.manufacturer_name} ({thread.country})
+Ingredient: {thread.ingredient}
+Follow-up number: {follow_up_num}
+
+Original email we sent:
+{original_email[:500]}
+
+Write a polite follow-up. Keep it under 80 words. Reference the original inquiry.
+Return ONLY valid JSON: {{"subject": "...", "body": "..."}}"""
+
+    headers = {"Content-Type": "application/json", "X-goog-api-key": api_key}
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 512},
+    }
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        for model in ["gemini-flash-latest", "gemini-2.0-flash-lite"]:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+            try:
+                resp = await client.post(url, headers=headers, json=payload)
+                if not resp.is_success:
+                    continue
+                text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                text = re.sub(r"```(?:json)?\s*", "", text).strip().rstrip("`").strip()
+                m = re.search(r"\{[\s\S]*\}", text)
+                if m:
+                    data = json.loads(m.group())
+                    return {"subject": data.get("subject", f"Re: {thread.subject}"), "body": data.get("body", "")}
+            except Exception:
+                continue
+
+    return {"subject": f"Follow-up: {thread.subject}", "body": ""}

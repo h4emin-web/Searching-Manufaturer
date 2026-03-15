@@ -8,6 +8,7 @@ from .config import get_settings
 from .routers import sessions, sourcing, outreach, regulatory, dashboard, debug, users
 from .services.email_receiver import start_polling
 from .services.reply_handler import handle_reply
+from .services.followup_scheduler import run_followup_scheduler
 
 logger = structlog.get_logger()
 settings = get_settings()
@@ -29,8 +30,10 @@ async def lifespan(app: FastAPI):
         logger.warning("supabase_not_configured_using_memory")
 
     poller_task = asyncio.create_task(start_polling(handle_reply))
+    followup_task = asyncio.create_task(run_followup_scheduler())
     yield
     poller_task.cancel()
+    followup_task.cancel()
     logger.info("shutdown")
 
 

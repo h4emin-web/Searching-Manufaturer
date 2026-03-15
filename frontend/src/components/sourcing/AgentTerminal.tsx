@@ -77,6 +77,26 @@ const AgentTerminal = ({ apiName, isActive, manufacturers, outreachPlanId, apiBa
             seenRef.current.add(key);
             addLog("warning", `${item.name} — 이메일 없음, 홈페이지 문의 필요: ${item.web_form_url || item.website || ""}`);
             done++;
+          } else if (item.status === "replied") {
+            seenRef.current.add(key);
+            addLog("success", `${item.name} — 답장 수신, AI 분석 중...`);
+            done++;
+          } else if (item.status === "escalated") {
+            seenRef.current.add(key);
+            const qs = item.escalated_questions?.join(" / ") || "";
+            addLog("warning", `${item.name} — 요청자 확인 필요: ${qs}`);
+            if (item.missing_items?.length) {
+              addLog("info", `${item.name} — 미수신 항목: ${item.missing_items.join(", ")}`);
+            }
+            done++;
+          } else if (item.status === "completed") {
+            seenRef.current.add(key);
+            addLog("success", `${item.name} — 모든 정보 수집 완료`);
+            done++;
+          } else if (item.status === "closed") {
+            seenRef.current.add(key);
+            addLog("info", `${item.name} — 공급 불가 답변 수신`);
+            done++;
           } else if (item.status === "failed") {
             seenRef.current.add(key);
             addLog("warning", `${item.name} — 발송 실패: ${item.error || ""}`);

@@ -68,8 +68,12 @@ def _fetch_replies_sync() -> list[dict]:
     """
     replies = []
     try:
+        imap_user = settings.IMAP_USER or settings.SMTP_USER
+        imap_pass = settings.IMAP_PASSWORD or settings.SMTP_PASSWORD
+        if not imap_user or not imap_pass:
+            return []
         with imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT) as imap:
-            imap.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            imap.login(imap_user, imap_pass)
             imap.select("INBOX")
 
             # 안 읽은 메일 중 답장(In-Reply-To 헤더 있는 것)만 검색

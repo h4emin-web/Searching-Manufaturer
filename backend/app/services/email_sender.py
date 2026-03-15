@@ -96,6 +96,8 @@ async def send_outreach_email(
     ingredient: str = "",
     country: str = "",
     register_thread: bool = True,
+    plan_id: str = "",
+    manufacturer_id: str = "",
 ) -> tuple[bool, str | None]:
     """
     아웃리치 이메일 발송
@@ -141,6 +143,8 @@ async def send_outreach_email(
                 subject=subject,
                 body=full_body,
                 country=country,
+                plan_id=plan_id,
+                manufacturer_id=manufacturer_id,
             )
     else:
         logger.error("email_failed", method=method, to=to_email, error=error)

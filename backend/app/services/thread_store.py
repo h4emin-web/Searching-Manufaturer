@@ -22,6 +22,13 @@ class EmailThread:
     country: str = ""
     auto_reply_count: int = 0
     max_auto_replies: int = 3
+    follow_up_count: int = 0          # 팔로업 발송 횟수 (최대 2)
+    has_reply: bool = False            # 제조사로부터 답장 수신 여부
+    last_sent_at: str = ""             # 마지막 발송 시각 (ISO)
+    escalated_questions: list[str] = field(default_factory=list)  # 요청자 답변 필요 질문
+    missing_items: list[str] = field(default_factory=list)        # 아직 미답 항목
+    plan_id: str = ""                  # 연결된 outreach plan_id
+    manufacturer_id: str = ""         # 연결된 제조사 id
     conversation: list[dict] = field(default_factory=list)
 
 
@@ -51,7 +58,8 @@ class ThreadStore:
         except Exception as exc:
             logger.warning("thread_store_load_failed", error=str(exc))
 
-    def register(self, message_id, to_email, manufacturer_name, ingredient, subject, body, country=""):
+    def register(self, message_id, to_email, manufacturer_name, ingredient, subject, body, country="", plan_id="", manufacturer_id=""):
+        now = datetime.utcnow().isoformat()
         thread = EmailThread(
             message_id=message_id,
             last_message_id=message_id,
@@ -60,7 +68,10 @@ class ThreadStore:
             ingredient=ingredient,
             subject=subject,
             country=country,
-            conversation=[{"role": "us", "body": body, "sent_at": datetime.utcnow().isoformat()}],
+            last_sent_at=now,
+            plan_id=plan_id,
+            manufacturer_id=manufacturer_id,
+            conversation=[{"role": "us", "body": body, "sent_at": now}],
         )
         self._threads[message_id] = thread
         self._by_message_id[message_id] = message_id
@@ -76,12 +87,15 @@ class ThreadStore:
         return None
 
     def add_reply(self, thread: EmailThread, body: str) -> None:
+        thread.has_reply = True
         thread.conversation.append({"role": "manufacturer", "body": body, "sent_at": datetime.utcnow().isoformat()})
         self._bg(self._update_thread(thread))
 
     def add_our_reply(self, thread: EmailThread, message_id: str, body: str) -> None:
-        thread.conversation.append({"role": "us", "body": body, "sent_at": datetime.utcnow().isoformat()})
+        now = datetime.utcnow().isoformat()
+        thread.conversation.append({"role": "us", "body": body, "sent_at": now})
         thread.last_message_id = message_id
+        thread.last_sent_at = now
         thread.auto_reply_count += 1
         self._by_message_id[message_id] = thread.message_id
         self._bg(self._update_thread(thread))
@@ -89,6 +103,26 @@ class ThreadStore:
 
     def can_auto_reply(self, thread: EmailThread) -> bool:
         return thread.auto_reply_count < thread.max_auto_replies
+
+    def can_follow_up(self, thread: EmailThread) -> bool:
+        return not thread.has_reply and thread.follow_up_count < 2
+
+    def needs_followup(self, thread: EmailThread, hours: int = 24) -> bool:
+        """마지막 발송 후 hours 시간 경과 여부"""
+        if not thread.last_sent_at or thread.has_reply:
+            return False
+        from datetime import timezone
+        try:
+            last = datetime.fromisoformat(thread.last_sent_at)
+            elapsed = (datetime.utcnow() - last).total_seconds() / 3600
+            return elapsed >= hours
+        except Exception:
+            return False
+
+    def set_escalated(self, thread: EmailThread, questions: list[str], missing: list[str]) -> None:
+        thread.escalated_questions = questions
+        thread.missing_items = missing
+        self._bg(self._update_thread(thread))
 
     def all_threads(self) -> list[EmailThread]:
         return list(self._threads.values())
