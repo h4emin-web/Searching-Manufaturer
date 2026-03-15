@@ -482,9 +482,6 @@ const Index = () => {
                     <h2 className="text-xl font-semibold text-foreground">
                       <span className="text-foreground">{apiName}</span> 제조소 탐색 중
                     </h2>
-                    <p className="text-muted-foreground text-ui">
-                      Gemini와 Qwen이 전 세계 제조소를 병렬로 검색하고 있습니다...
-                    </p>
                   </div>
 
                   <div className="w-full max-w-md space-y-4">
@@ -501,14 +498,6 @@ const Index = () => {
                     </div>
                     <div className="relative h-8 overflow-hidden rounded-sm glass-surface">
                       <div className="scanning-line h-full w-full" />
-                    </div>
-                    <div className="flex gap-6 justify-center">
-                      {["Gemini", "Qwen"].map(model => (
-                        <div key={model} className="flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse-glow" />
-                          <span className="text-data text-muted-foreground font-mono">{model} 검색 중...</span>
-                        </div>
-                      ))}
                     </div>
                   </div>
 
