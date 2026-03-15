@@ -14,21 +14,13 @@ async def dashboard_stream(session_id: str):
     """Server-Sent Events로 실시간 아웃리치 상태 스트리밍"""
 
     async def event_generator():
-        # 실제 구현: Redis Pub/Sub 구독
-        # 여기서는 모의 이벤트로 시연
-        events = [
-            {"type": "sourcing_progress", "progress": 25, "message": "GPT-4o 검색 완료 (12개)"},
-            {"type": "sourcing_progress", "progress": 50, "message": "Gemini 검색 완료 (9개)"},
-            {"type": "sourcing_progress", "progress": 75, "message": "DeepSeek 검색 완료 (15개)"},
-            {"type": "dedup_complete", "total_raw": 36, "total_dedup": 18, "message": "중복 제거 완료"},
-            {"type": "outreach_sent", "manufacturer": "BASF SE", "channel": "email"},
-            {"type": "outreach_replied", "manufacturer": "BASF SE", "channel": "email"},
-        ]
-        for event in events:
-            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-            await asyncio.sleep(1)
-
-        yield "data: {\"type\": \"complete\"}\n\n"
+        # 연결 확인용 ping만 보내고 실제 이벤트는 없음
+        # (실제 이메일 발송/응답 이벤트는 추후 Redis pub/sub으로 구현)
+        yield f"data: {json.dumps({'type': 'connected', 'session_id': session_id})}\n\n"
+        # 30초마다 keepalive ping (연결 유지)
+        for _ in range(60):
+            await asyncio.sleep(30)
+            yield ": keepalive\n\n"
 
     return StreamingResponse(
         event_generator(),
