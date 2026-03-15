@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import LoginStep from "@/components/sourcing/LoginStep";
 import SearchStep from "@/components/sourcing/SearchStep";
 import PurposeStep from "@/components/sourcing/PurposeStep";
 import RequirementsStep from "@/components/sourcing/RequirementsStep";
@@ -7,6 +8,7 @@ import RegionStep from "@/components/sourcing/RegionStep";
 import DocumentStep from "@/components/sourcing/DocumentStep";
 import ResultsStep from "@/components/sourcing/ResultsStep";
 import AgentTerminal from "@/components/sourcing/AgentTerminal";
+import MyRequests, { SourcingRequest } from "@/pages/MyRequests";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
 
@@ -39,6 +41,11 @@ const getFlag = (country: string) =>
   country?.toLowerCase().includes("india") ? "🇮🇳" : "🌏");
 
 const Index = () => {
+  // Auth
+  const [user, setUser] = useState<{ koreanName: string; englishName: string } | null>(null);
+  const [view, setView] = useState<"login" | "requests" | "sourcing">("login");
+
+  // Sourcing flow
   const [step, setStep] = useState<Step>("search");
   const [apiName, setApiName] = useState("");
   const [purpose, setPurpose] = useState("");
@@ -48,10 +55,90 @@ const Index = () => {
   const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
   const [sourcingProgress, setSourcingProgress] = useState(0);
   const [sourcingError, setSourcingError] = useState("");
+  const [currentRequestId, setCurrentRequestId] = useState<string>("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Create session on mount
+  // Load user from localStorage
   useEffect(() => {
+    const stored = localStorage.getItem("pharma_user");
+    if (stored) {
+      setUser(JSON.parse(stored));
+      setView("requests");
+    }
+  }, []);
+
+  const handleLogin = (koreanName: string, englishName: string) => {
+    const u = { koreanName, englishName };
+    setUser(u);
+    localStorage.setItem("pharma_user", JSON.stringify(u));
+    setView("requests");
+  };
+
+  const handleNewRequest = () => {
+    setStep("search");
+    setApiName("");
+    setPurpose("");
+    setRequirements([]);
+    setManufacturers([]);
+    setSourcingError("");
+    setView("sourcing");
+  };
+
+  const handleViewRequest = (req: SourcingRequest) => {
+    setApiName(req.ingredientName);
+    setPurpose(req.purpose);
+    setRequirements(req.requirements);
+    setCurrentRequestId(req.id);
+    if (req.status === "reviewing") {
+      setStep("results");
+    } else if (req.status === "monitoring" || req.status === "outreach") {
+      setStep("sourcing");
+    } else {
+      setStep("searching");
+    }
+    setView("sourcing");
+  };
+
+  // Save request to localStorage
+  const saveRequest = (req: Partial<SourcingRequest>) => {
+    if (!user) return;
+    const key = `requests_${user.koreanName}`;
+    const stored = localStorage.getItem(key);
+    const requests: SourcingRequest[] = stored ? JSON.parse(stored) : [];
+    const existing = requests.findIndex(r => r.id === currentRequestId);
+    if (existing >= 0) {
+      requests[existing] = { ...requests[existing], ...req };
+    } else {
+      const newReq: SourcingRequest = {
+        id: currentRequestId,
+        ingredientName: apiName,
+        purpose,
+        requirements,
+        status: "searching",
+        createdAt: new Date().toISOString(),
+        ...req,
+      };
+      requests.unshift(newReq);
+    }
+    localStorage.setItem(key, JSON.stringify(requests));
+  };
+
+  const updateRequestStatus = (id: string, updates: Partial<SourcingRequest>) => {
+    if (!user) return;
+    const key = `requests_${user.koreanName}`;
+    const stored = localStorage.getItem(key);
+    if (!stored) return;
+    const requests: SourcingRequest[] = JSON.parse(stored);
+    const idx = requests.findIndex(r => r.id === id);
+    if (idx >= 0) {
+      requests[idx] = { ...requests[idx], ...updates };
+      localStorage.setItem(key, JSON.stringify(requests));
+    }
+  };
+
+  // Create session
+  useEffect(() => {
+    if (view !== "sourcing") return;
     fetch(`${API_BASE}/sessions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -60,7 +147,7 @@ const Index = () => {
       .then(r => r.json())
       .then(data => setSessionId(data.id || data.session_id || "demo"))
       .catch(() => setSessionId("demo-" + Date.now()));
-  }, []);
+  }, [view]);
 
   const handleSearch = (query: string) => {
     setApiName(query);
@@ -90,6 +177,9 @@ const Index = () => {
     setSourcingProgress(0);
     setSourcingError("");
 
+    const reqId = "req-" + Date.now();
+    setCurrentRequestId(reqId);
+
     try {
       const res = await fetch(`${API_BASE}/sourcing/run`, {
         method: "POST",
@@ -99,14 +189,17 @@ const Index = () => {
           ingredient_name: apiName,
           use_case: purpose,
           regulatory_requirements: requirements,
-          regions: regions,
+          regions,
           sourcing_notes: "",
+          requester_name: user?.englishName || "",
         }),
       });
       const data = await res.json();
       const taskId = data.task_id;
 
-      // Poll for results
+      // Save request
+      saveRequest({ id: reqId, taskId, status: "searching" });
+
       pollRef.current = setInterval(async () => {
         try {
           const statusRes = await fetch(`${API_BASE}/sourcing/${taskId}`);
@@ -129,6 +222,7 @@ const Index = () => {
               is_excluded: false,
             }));
             setManufacturers(mfrs);
+            updateRequestStatus(reqId, { status: "reviewing", totalFound: statusData.total_deduplicated });
             setStep("results");
           } else if (statusData.status === "failed") {
             clearInterval(pollRef.current!);
@@ -146,12 +240,29 @@ const Index = () => {
 
   const handleStartSourcing = (selected: string[], excluded: string[]) => {
     setManufacturers(prev => prev.map(m => ({ ...m, is_excluded: excluded.includes(m.id) })));
+    updateRequestStatus(currentRequestId, { status: "monitoring", sent: selected.length, replied: 0 });
     setStep("sourcing");
   };
 
-  // Cleanup on unmount
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
+  // Render login
+  if (view === "login") {
+    return <LoginStep onLogin={handleLogin} />;
+  }
+
+  // Render my requests
+  if (view === "requests" && user) {
+    return (
+      <MyRequests
+        user={user}
+        onNewRequest={handleNewRequest}
+        onViewRequest={handleViewRequest}
+      />
+    );
+  }
+
+  // Render sourcing flow
   const progressWidth =
     step === "purpose" ? "20%" :
     step === "requirements" ? "40%" :
@@ -165,10 +276,16 @@ const Index = () => {
       <header className="border-b border-border px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-2 h-2 rounded-full bg-primary" />
-          <span className="font-semibold text-foreground tracking-tight">SourceAgent</span>
+          <span className="font-semibold text-foreground tracking-tight">Pharma Sourcing</span>
           <span className="text-data text-muted-foreground font-mono">v1.0</span>
         </div>
         <div className="flex items-center gap-4">
+          <button
+            onClick={() => setView("requests")}
+            className="text-data text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+          >
+            내 요청 목록
+          </button>
           {step !== "search" && (
             <button
               onClick={() => { setStep("search"); setApiName(""); setPurpose(""); setManufacturers([]); }}
@@ -178,8 +295,8 @@ const Index = () => {
             </button>
           )}
           <div className="text-data text-muted-foreground font-mono">
-            {step !== "search" && `${apiName} — `}
-            {step === "search" && "대기 중"}
+            {user?.koreanName} —{" "}
+            {step === "search" && "원료 입력"}
             {step === "purpose" && "Step 1/5"}
             {step === "requirements" && "Step 2/5"}
             {step === "region" && "Step 3/5"}
@@ -194,10 +311,7 @@ const Index = () => {
       {/* Progress bar */}
       {step !== "search" && (
         <div className="h-[2px] bg-secondary">
-          <div
-            className="h-full bg-primary transition-all duration-500"
-            style={{ width: progressWidth }}
-          />
+          <div className="h-full bg-primary transition-all duration-500" style={{ width: progressWidth }} />
         </div>
       )}
 
@@ -212,23 +326,18 @@ const Index = () => {
           {step === "region" && <RegionStep key="region" onSubmit={handleRegion} />}
           {step === "documents" && <DocumentStep key="documents" onSubmit={handleDocuments} />}
 
-          {/* AI Searching loading state */}
           {step === "searching" && (
             <motion.div
               key="searching"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.4 }}
               className="flex flex-col items-center justify-center min-h-[60vh] gap-8"
             >
               {sourcingError ? (
                 <div className="text-center space-y-4">
                   <p className="text-accent text-ui">{sourcingError}</p>
-                  <button
-                    onClick={handleDocuments}
-                    className="text-data text-primary hover:underline cursor-pointer"
-                  >
+                  <button onClick={handleDocuments} className="text-data text-primary hover:underline cursor-pointer">
                     다시 시도
                   </button>
                 </div>
@@ -243,7 +352,6 @@ const Index = () => {
                       Gemini와 Qwen이 전 세계 제조소를 병렬로 검색하고 있습니다...
                     </p>
                   </div>
-
                   <div className="w-full max-w-md space-y-4">
                     <div className="flex justify-between text-data text-muted-foreground font-mono">
                       <span>검색 진행률</span>
@@ -259,7 +367,6 @@ const Index = () => {
                     <div className="relative h-8 overflow-hidden rounded-sm glass-surface">
                       <div className="scanning-line h-full w-full" />
                     </div>
-
                     <div className="flex gap-6 justify-center">
                       {["Gemini", "Qwen"].map(model => (
                         <div key={model} className="flex items-center gap-2">
@@ -287,7 +394,6 @@ const Index = () => {
         </AnimatePresence>
       </main>
 
-      {/* Agent Terminal */}
       {step === "sourcing" && (
         <AgentTerminal
           apiName={apiName}
