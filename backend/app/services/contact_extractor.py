@@ -11,7 +11,12 @@ from typing import TypedDict
 
 import structlog
 from bs4 import BeautifulSoup
-from playwright.async_api import async_playwright, Page, Browser
+
+try:
+    from playwright.async_api import async_playwright, Page, Browser
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    PLAYWRIGHT_AVAILABLE = False
 
 logger = structlog.get_logger()
 
@@ -147,6 +152,10 @@ async def crawl_manufacturer_contacts(
     2. 연락처 페이지 감지 시 추가 크롤링
     """
     if not website_url or not website_url.startswith("http"):
+        return _empty_contacts()
+
+    if not PLAYWRIGHT_AVAILABLE:
+        logger.warning("playwright_not_available", url=website_url)
         return _empty_contacts()
 
     try:
