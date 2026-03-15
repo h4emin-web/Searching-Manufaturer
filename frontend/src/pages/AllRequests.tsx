@@ -18,25 +18,55 @@ interface AllRequestsProps {
   apiBase: string;
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  searching: "AI 검색 중",
-  reviewing: "제조소 검토 대기",
-  outreach: "연락 발송 중",
-  monitoring: "응답 대기 중",
-  completed: "완료",
-};
-
-const STATUS_COLOR: Record<string, string> = {
-  searching: "text-primary",
-  reviewing: "text-accent",
-  outreach: "text-primary",
-  monitoring: "text-primary",
-  completed: "text-muted-foreground",
-};
-
 const PURPOSE_LABEL: Record<string, string> = {
   pharma: "의약품", pharmaceutical: "의약품", cosmetic: "화장품", food: "식품",
 };
+
+// 진행 단계 정의
+const STEPS = [
+  { key: "searching",  label: "AI 검색" },
+  { key: "reviewing",  label: "제조소 검토" },
+  { key: "outreach",   label: "연락 발송" },
+  { key: "monitoring", label: "응답 대기" },
+  { key: "completed",  label: "완료" },
+];
+
+const STATUS_ORDER: Record<string, number> = {
+  searching: 0, reviewing: 1, outreach: 2, monitoring: 3, completed: 4,
+};
+
+function ProgressSteps({ status }: { status: string }) {
+  const currentIdx = STATUS_ORDER[status] ?? -1;
+  const isStopped = status === "completed" && currentIdx < 4; // 완료 전 중단
+
+  return (
+    <div className="flex items-center gap-0 mt-2">
+      {STEPS.map((step, i) => {
+        const done = i < currentIdx;
+        const active = i === currentIdx;
+        return (
+          <div key={step.key} className="flex items-center">
+            <div className="flex flex-col items-center">
+              <div
+                className={`w-2 h-2 rounded-full transition-colors ${
+                  done || active ? "bg-foreground" : "bg-border"
+                }`}
+              />
+              <span className={`text-[10px] font-mono mt-0.5 whitespace-nowrap ${
+                active ? "text-foreground font-semibold" : done ? "text-muted-foreground" : "text-border"
+              }`}>
+                {step.label}
+              </span>
+            </div>
+            {i < STEPS.length - 1 && (
+              <div className={`w-8 h-[1px] mb-3 ${i < currentIdx ? "bg-foreground" : "bg-border"}`} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 const AllRequests = ({ onBack, apiBase }: AllRequestsProps) => {
   const [requests, setRequests] = useState<AllRequest[]>([]);
@@ -49,10 +79,7 @@ const AllRequests = ({ onBack, apiBase }: AllRequestsProps) => {
       setLoading(true);
       try {
         const res = await fetch(`${apiBase}/users/requests/all`);
-        if (res.ok) {
-          const data = await res.json();
-          setRequests(data);
-        }
+        if (res.ok) setRequests(await res.json());
       } catch { /* ignore */ }
       setLoading(false);
     };
@@ -61,10 +88,7 @@ const AllRequests = ({ onBack, apiBase }: AllRequestsProps) => {
 
   const filtered = requests.filter((r) => {
     const q = search.toLowerCase();
-    const matchSearch =
-      !q ||
-      r.ingredient_name?.toLowerCase().includes(q) ||
-      r.user_name?.toLowerCase().includes(q);
+    const matchSearch = !q || r.ingredient_name?.toLowerCase().includes(q) || r.user_name?.toLowerCase().includes(q);
     const matchStatus = statusFilter === "all" || r.status === statusFilter;
     return matchSearch && matchStatus;
   });
@@ -77,10 +101,7 @@ const AllRequests = ({ onBack, apiBase }: AllRequestsProps) => {
           <span className="font-semibold text-foreground tracking-tight">Pharma Sourcing</span>
           <span className="text-data text-muted-foreground font-mono">v1.0</span>
         </div>
-        <button
-          onClick={onBack}
-          className="text-data text-muted-foreground hover:text-foreground transition-colors"
-        >
+        <button onClick={onBack} className="text-data text-muted-foreground hover:text-foreground transition-colors">
           ← 내 요청 목록
         </button>
       </header>
@@ -91,16 +112,13 @@ const AllRequests = ({ onBack, apiBase }: AllRequestsProps) => {
           <h2 className="text-xl font-semibold text-foreground">전체 진행 현황</h2>
         </div>
 
-        {/* 검색 / 필터 */}
         <div className="flex gap-3 flex-wrap">
-          <div className="relative flex-1 min-w-[200px]">
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="이름 또는 원료명 검색..."
-              className="w-full glass-surface rounded-sm px-4 py-2.5 text-foreground text-ui bg-transparent focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/50"
-            />
-          </div>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="담당자 또는 원료명 검색..."
+            className="flex-1 min-w-[200px] glass-surface rounded-sm px-4 py-2.5 text-foreground text-ui bg-transparent focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/50"
+          />
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -108,7 +126,7 @@ const AllRequests = ({ onBack, apiBase }: AllRequestsProps) => {
           >
             <option value="all">전체 상태</option>
             <option value="searching">AI 검색 중</option>
-            <option value="reviewing">검토 대기</option>
+            <option value="reviewing">제조소 검토 대기</option>
             <option value="outreach">연락 발송 중</option>
             <option value="monitoring">응답 대기</option>
             <option value="completed">완료</option>
@@ -127,45 +145,44 @@ const AllRequests = ({ onBack, apiBase }: AllRequestsProps) => {
             </p>
           </div>
         ) : (
-          <div className="space-y-2">
-            <div className="text-data text-muted-foreground font-mono mb-2">
-              {filtered.length}건
-            </div>
-            {/* 테이블 헤더 */}
-            <div className="hidden md:grid grid-cols-[1fr_2fr_1fr_1fr_1fr_1fr] gap-4 px-4 py-2 text-data text-muted-foreground font-mono border-b border-border">
-              <span>담당자</span>
-              <span>원료명</span>
-              <span>용도</span>
-              <span>제조소</span>
-              <span>발송/응답</span>
-              <span>상태</span>
-            </div>
+          <div className="space-y-3">
+            <div className="text-data text-muted-foreground font-mono">{filtered.length}건</div>
             {filtered.map((req, i) => (
               <motion.div
                 key={req.id}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.03 }}
-                className="glass-surface rounded-sm px-4 py-3 grid md:grid-cols-[1fr_2fr_1fr_1fr_1fr_1fr] gap-3 md:gap-4 items-center"
+                className="glass-surface rounded-sm px-5 py-4"
               >
-                <span className="text-ui text-foreground font-semibold">{req.user_name}</span>
-                <span className="text-ui text-foreground font-semibold">{req.ingredient_name}</span>
-                <span className="text-data text-muted-foreground">
-                  {PURPOSE_LABEL[req.purpose] || req.purpose}
-                </span>
-                <span className="text-data font-mono">
-                  {req.total_found > 0 ? (
-                    <span className="text-foreground">{req.total_found}곳</span>
-                  ) : (
-                    <span className="text-muted-foreground">—</span>
-                  )}
-                </span>
-                <span className="text-data font-mono text-muted-foreground">
-                  {req.sent > 0 ? `${req.sent} / ${req.replied ?? 0}` : "—"}
-                </span>
-                <span className={`text-data font-mono font-semibold ${STATUS_COLOR[req.status] || "text-muted-foreground"}`}>
-                  {STATUS_LABEL[req.status] || req.status}
-                </span>
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-3 flex-wrap mb-1">
+                      <span className="font-semibold text-foreground">{req.ingredient_name}</span>
+                      <span className="text-data font-mono px-2 py-0.5 rounded-sm bg-secondary text-muted-foreground">
+                        {PURPOSE_LABEL[req.purpose] || req.purpose}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-4 text-data text-muted-foreground flex-wrap">
+                      <span className="font-semibold text-foreground">담당: {req.user_name}</span>
+                      <span className="font-mono">{new Date(req.created_at).toLocaleDateString("ko-KR")}</span>
+                      {req.total_found > 0 && (
+                        <span>제조소 <span className="text-foreground font-semibold">{req.total_found}</span>곳 확인</span>
+                      )}
+                      {req.sent > 0 && (
+                        <span>발송 <span className="text-foreground font-semibold">{req.sent}</span> / 응답 <span className="text-foreground font-semibold">{req.replied ?? 0}</span></span>
+                      )}
+                    </div>
+                    <ProgressSteps status={req.status} />
+                  </div>
+                  <div className="shrink-0 text-right">
+                    {(req.status === "searching" || req.status === "outreach" || req.status === "monitoring") && (
+                      <div className="w-16 h-[2px] overflow-hidden rounded-full bg-secondary">
+                        <div className="scanning-line h-full w-full" />
+                      </div>
+                    )}
+                  </div>
+                </div>
               </motion.div>
             ))}
           </div>
