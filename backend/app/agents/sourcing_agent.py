@@ -104,46 +104,42 @@ async def _query_gemini_native(
     if not api_key:
         raise ValueError("GEMINI_API_KEY not configured")
 
-    # AI Studio 기본 형식 — role 없이, v1beta 우선
-    # 최신 모델명 우선 시도 (2025 기준)
-    models_to_try = [
-        "gemini-2.5-flash",
-        "gemini-2.5-pro",
-        "gemini-2.0-flash-lite",
-        "gemini-2.0-flash-exp",
-        "gemini-1.5-flash-001",
-        "gemini-1.5-flash-002",
-        "gemini-1.5-pro-001",
-        "gemini-1.5-pro-002",
-    ]
     full_prompt = f"{system_prompt}\n\n{user_prompt}\n\nReturn ONLY valid JSON, no markdown."
-    # role 필드 없이 최소 형식 사용
     payload = {
         "contents": [{"parts": [{"text": full_prompt}]}],
         "generationConfig": {"temperature": 0.2},
     }
+
+    # AI Studio cURL 방식 그대로 — X-goog-api-key 헤더 + gemini-flash-latest
+    headers = {"Content-Type": "application/json", "X-goog-api-key": api_key}
+    models_to_try = [
+        "gemini-flash-latest",
+        "gemini-2.0-flash-lite",
+        "gemini-2.0-flash-001",
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-1.5-flash-001",
+    ]
 
     errors: list[str] = []
     async with httpx.AsyncClient(timeout=timeout) as client:
         for model in models_to_try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
             try:
-                resp = await client.post(url, params={"key": api_key}, json=payload)
-                log_msg = f"v1beta/{model} → {resp.status_code}"
+                resp = await client.post(url, headers=headers, json=payload)
                 if not resp.is_success:
-                    body_preview = resp.text[:400]
-                    logger.warning("gemini_attempt_failed", msg=log_msg, body=body_preview)
-                    errors.append(f"{log_msg}: {body_preview}")
+                    errors.append(f"{model} → {resp.status_code}: {resp.text[:200]}")
+                    logger.warning("gemini_attempt_failed", model=model, status=resp.status_code)
                     continue
                 content = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
                 result = _extract_manufacturers(content)
                 logger.info("gemini_success", model=model, count=len(result))
                 return result
             except Exception as e:
-                errors.append(f"v1beta/{model}: {e}")
+                errors.append(f"{model}: {e}")
                 continue
 
-    raise RuntimeError("All Gemini endpoints failed:\n" + "\n".join(errors))
+    raise RuntimeError("All Gemini models failed:\n" + "\n".join(errors))
 
 
 # ─── Ollama 직접 호출 ──────────────────────────────────────────
