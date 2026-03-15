@@ -77,17 +77,12 @@ def _build_prompt(
         region_instruction = "Focus on China, India, Europe (Germany, Italy, Netherlands), USA."
 
     return (
-        f"Task: Find REAL, VERIFIED manufacturers that ACTUALLY PRODUCE '{ingredient}'.\n"
-        f"Use case: {use_case.value}\n"
-        f"Required certifications: {req_list}\n"
-        f"Region constraint: {region_instruction}\n"
+        f"List 10 real manufacturers that PRODUCE '{ingredient}' (not distributors).\n"
+        f"Use case: {use_case.value} | Certifications: {req_list}\n"
+        f"{region_instruction}\n"
         f"{notes}\n"
-        f"CRITICAL rules:\n"
-        f"- Only include companies that CURRENTLY manufacture '{ingredient}' as a product line.\n"
-        f"- Do NOT include distributors, traders, or resellers.\n"
-        f"- Do NOT include companies that only mention '{ingredient}' as an ingredient in their products.\n"
-        f"- If you are not certain a company manufactures '{ingredient}', exclude them.\n"
-        f"- Include 10-15 manufacturers. Return ONLY valid JSON.\n"
+        f"Return JSON only: {{\"manufacturers\":[{{\"name\":\"\",\"country\":\"\",\"city\":\"\","
+        f"\"contact_email\":\"\",\"website\":\"\",\"certifications\":[],\"confidence_score\":0.9}}]}}"
     )
 
 
@@ -146,7 +141,7 @@ async def _query_gemini_native(
     full_prompt = f"{system_prompt}\n\n{user_prompt}\n\nReturn ONLY valid JSON, no markdown."
     payload = {
         "contents": [{"parts": [{"text": full_prompt}]}],
-        "generationConfig": {"temperature": 0.2},
+        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 4096},
     }
 
     # AI Studio cURL 방식 그대로 — X-goog-api-key 헤더 + gemini-flash-latest
