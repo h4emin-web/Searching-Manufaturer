@@ -12,9 +12,10 @@ httpx>=0.26,<0.28
 # Deduplication
 rapidfuzz==3.10.1
 
-# Email
+# Email & Web
 aiosmtplib==3.0.2
 python-multipart==0.0.18
+beautifulsoup4==4.12.3
 
 # Utils
 python-dotenv==1.0.1
