@@ -94,41 +94,38 @@ def _extract_manufacturers(text: str) -> list[dict]:
     return []
 
 
-async def _query_openai_compatible(
-    base_url: str,
+async def _query_gemini_native(
     api_key: str,
-    model: str,
     system_prompt: str,
     user_prompt: str,
     timeout: float = 90.0,
 ) -> list[dict]:
+    """Gemini 네이티브 generateContent API 직접 호출"""
     if not api_key:
-        raise ValueError(f"API key not configured for {base_url}")
+        raise ValueError("GEMINI_API_KEY not configured")
 
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
+    model = "gemini-1.5-flash"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
+        "contents": [
+            {"role": "user", "parts": [{"text": f"{system_prompt}\n\n{user_prompt}"}]}
         ],
-        "response_format": {"type": "json_object"},
-        "temperature": 0.2,
-        "max_tokens": 4096,
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "temperature": 0.2,
+            "maxOutputTokens": 4096,
+        },
     }
     async with httpx.AsyncClient(timeout=timeout) as client:
         resp = await client.post(
-            f"{base_url.rstrip('/')}/chat/completions",
-            headers=headers,
+            url,
+            params={"key": api_key},
             json=payload,
         )
         resp.raise_for_status()
-        content = resp.json()["choices"][0]["message"]["content"]
+        content = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
         result = _extract_manufacturers(content)
-        logger.info("api_response_parsed", base_url=base_url, count=len(result), raw_length=len(content))
+        logger.info("gemini_native_parsed", count=len(result))
         return result
 
 
@@ -161,18 +158,14 @@ async def _query_single_llm(
         raw_items: list[dict] = []
 
         if provider == LLMProvider.GEMINI:
-            raw_items = await _query_openai_compatible(
-                base_url="https://generativelanguage.googleapis.com/v1beta/openai",
+            raw_items = await _query_gemini_native(
                 api_key=settings.GEMINI_API_KEY or "",
-                model="gemini-1.5-flash",
                 system_prompt=SYSTEM_PROMPT,
                 user_prompt=prompt,
             )
         elif provider == LLMProvider.QWEN:
-            raw_items = await _query_openai_compatible(
-                base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-                api_key=settings.QWEN_API_KEY or "",
-                model="qwen-plus",
+            raw_items = await _query_gemini_native(
+                api_key=settings.GEMINI_API_KEY or "",
                 system_prompt=SYSTEM_PROMPT,
                 user_prompt=prompt,
             )

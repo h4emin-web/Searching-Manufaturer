@@ -18,7 +18,7 @@ const documentOptions = [
 
 const DocumentStep = ({ onSubmit, onBack }: DocumentStepProps) => {
   const [selected, setSelected] = useState<string[]>(["coa", "msds", "sample"]);
-  const [sampleAmount, setSampleAmount] = useState("최대한 많이 (무상 제공)");
+  const [sampleAmount, setSampleAmount] = useState("");
   const [customNote, setCustomNote] = useState("");
   const showSample = selected.includes("sample");
 
@@ -75,18 +75,14 @@ const DocumentStep = ({ onSubmit, onBack }: DocumentStepProps) => {
           animate={{ opacity: 1, height: "auto" }}
           className="space-y-2"
         >
-          <label className="text-data text-muted-foreground">샘플 수량</label>
-          <select
+          <label className="text-data text-muted-foreground">샘플 최소 필요 수량 (미입력 시 무상 최대 요청)</label>
+          <input
+            type="text"
             value={sampleAmount}
             onChange={(e) => setSampleAmount(e.target.value)}
-            className="w-full glass-surface rounded-sm p-2.5 text-foreground text-ui bg-transparent focus:outline-none focus:ring-1 focus:ring-primary"
-          >
-            <option value="최대한 많이 (무상 제공)">최대한 많이 (무상 제공)</option>
-            <option value="100g">100g</option>
-            <option value="500g">500g</option>
-            <option value="1kg">1kg</option>
-            <option value="5kg">5kg</option>
-          </select>
+            placeholder="예: 500g, 1kg — 비워두면 무상 최대 수량 요청"
+            className="w-full glass-surface rounded-sm p-2.5 text-foreground text-ui bg-transparent focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/50"
+          />
         </motion.div>
       )}
 
