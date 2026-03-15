@@ -171,11 +171,26 @@ async def _query_gemini_native(
                     logger.warning("gemini_attempt_failed", model=model, status=resp.status_code)
                     continue
                 rjson = resp.json()
-                content = rjson["candidates"][0]["content"]["parts"][0]["text"]
+                # 안전 필터 차단 확인
+                feedback = rjson.get("promptFeedback", {})
+                if feedback.get("blockReason"):
+                    errors.append(f"{model}: blocked by safety filter ({feedback['blockReason']})")
+                    continue
+                candidates = rjson.get("candidates", [])
+                if not candidates:
+                    errors.append(f"{model}: empty candidates. response={str(rjson)[:200]}")
+                    continue
+                candidate = candidates[0]
+                finish = candidate.get("finishReason", "")
+                if "content" not in candidate:
+                    errors.append(f"{model}: no content field (finishReason={finish})")
+                    continue
+                content = candidate["content"]["parts"][0]["text"]
                 logger.info("gemini_raw_response", model=model, preview=content[:600])
                 result = _extract_manufacturers(content)
                 if not result:
-                    raise ValueError(f"0 manufacturers parsed from: {content[:400]}")
+                    errors.append(f"{model}: 0 manufacturers parsed. content={content[:300]}")
+                    continue
                 logger.info("gemini_success", model=model, count=len(result))
                 return result
             except Exception as e:
@@ -234,12 +249,20 @@ async def _query_single_llm(
             raw_items = await _query_ollama(model_name, SYSTEM_PROMPT, prompt)
 
         manufacturers: list[RawManufacturer] = []
+        validate_errors = []
         for item in raw_items:
             try:
                 item["source_llm"] = provider
+                # confidence_score가 100점 만점으로 오면 0~1로 변환
+                if isinstance(item.get("confidence_score"), (int, float)) and item["confidence_score"] > 1:
+                    item["confidence_score"] = item["confidence_score"] / 100.0
                 manufacturers.append(RawManufacturer.model_validate(item))
-            except Exception:
-                pass
+            except Exception as e:
+                validate_errors.append(str(e)[:80])
+
+        if validate_errors and not manufacturers:
+            logger.warning("all_validate_failed", sample=validate_errors[:2], raw_count=len(raw_items))
+            return provider, [], f"Validation failed for all {len(raw_items)} items: {validate_errors[0]}"
 
         logger.info("llm_sourcing_complete", provider=provider.value, count=len(manufacturers))
         return provider, manufacturers, None
