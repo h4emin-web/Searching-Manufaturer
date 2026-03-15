@@ -247,10 +247,22 @@ async def _query_single_llm(
         validate_errors = []
         for item in raw_items:
             try:
+                # 필드명 정규화 (LLM마다 다른 키 사용)
+                for alt, canonical in [
+                    ("manufacturer_name", "name"), ("company_name", "name"),
+                    ("company", "name"), ("manufacturer", "name"),
+                    ("nation", "country"), ("location", "country"),
+                    ("email", "contact_email"), ("contact", "contact_email"),
+                    ("url", "website"), ("homepage", "website"),
+                    ("score", "confidence_score"), ("confidence", "confidence_score"),
+                ]:
+                    if alt in item and canonical not in item:
+                        item[canonical] = item[alt]
                 item["source_llm"] = provider
-                # confidence_score가 100점 만점으로 오면 0~1로 변환
-                if isinstance(item.get("confidence_score"), (int, float)) and item["confidence_score"] > 1:
-                    item["confidence_score"] = item["confidence_score"] / 100.0
+                # confidence_score가 100점 만점이면 0~1로 변환
+                cs = item.get("confidence_score")
+                if isinstance(cs, (int, float)) and cs > 1:
+                    item["confidence_score"] = cs / 100.0
                 manufacturers.append(RawManufacturer.model_validate(item))
             except Exception as e:
                 validate_errors.append(str(e)[:80])
