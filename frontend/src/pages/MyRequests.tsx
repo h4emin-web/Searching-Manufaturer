@@ -19,6 +19,7 @@ interface MyRequestsProps {
   onNewRequest: () => void;
   onViewRequest: (req: SourcingRequest) => void;
   onViewAll: () => void;
+  onViewMyProgress: () => void;
   apiBase: string;
 }
 
@@ -42,7 +43,7 @@ const PURPOSE_LABEL: Record<string, string> = {
   pharma: "의약품", pharmaceutical: "의약품", cosmetic: "화장품", food: "식품",
 };
 
-const MyRequests = ({ user, onNewRequest, onViewRequest, onViewAll, apiBase }: MyRequestsProps) => {
+const MyRequests = ({ user, onNewRequest, onViewRequest, onViewAll, onViewMyProgress, apiBase }: MyRequestsProps) => {
   const [requests, setRequests] = useState<SourcingRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState<string | null>(null);
@@ -101,6 +102,12 @@ const MyRequests = ({ user, onNewRequest, onViewRequest, onViewAll, apiBase }: M
         </div>
         <div className="flex items-center gap-4">
           <span className="text-data text-muted-foreground font-mono">{user.koreanName}</span>
+          <button
+            onClick={onViewMyProgress}
+            className="text-data text-muted-foreground hover:text-foreground transition-colors font-mono"
+          >
+            내 진행상황
+          </button>
           <button
             onClick={onViewAll}
             className="text-data text-muted-foreground hover:text-foreground transition-colors font-mono"

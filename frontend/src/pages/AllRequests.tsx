@@ -16,6 +16,7 @@ interface AllRequest {
 interface AllRequestsProps {
   onBack: () => void;
   apiBase: string;
+  filterUser?: string; // 특정 사용자만 보기
 }
 
 const PURPOSE_LABEL: Record<string, string> = {
@@ -68,7 +69,7 @@ function ProgressSteps({ status }: { status: string }) {
   );
 }
 
-const AllRequests = ({ onBack, apiBase }: AllRequestsProps) => {
+const AllRequests = ({ onBack, apiBase, filterUser }: AllRequestsProps) => {
   const [requests, setRequests] = useState<AllRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -78,13 +79,30 @@ const AllRequests = ({ onBack, apiBase }: AllRequestsProps) => {
     const load = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`${apiBase}/users/requests/all`);
-        if (res.ok) setRequests(await res.json());
+        const url = filterUser
+          ? `${apiBase}/users/${encodeURIComponent(filterUser)}/requests`
+          : `${apiBase}/users/requests/all`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          // snake_case → unified shape
+          setRequests(data.map((r: any) => ({
+            id: r.id,
+            user_name: r.user_name ?? filterUser ?? "",
+            ingredient_name: r.ingredient_name ?? r.ingredientName ?? "",
+            purpose: r.purpose ?? "",
+            status: r.status ?? "",
+            total_found: r.total_found ?? r.totalFound ?? 0,
+            sent: r.sent ?? 0,
+            replied: r.replied ?? 0,
+            created_at: r.created_at ?? r.createdAt ?? "",
+          })));
+        }
       } catch { /* ignore */ }
       setLoading(false);
     };
     load();
-  }, [apiBase]);
+  }, [apiBase, filterUser]);
 
   const filtered = requests.filter((r) => {
     const q = search.toLowerCase();
@@ -108,8 +126,10 @@ const AllRequests = ({ onBack, apiBase }: AllRequestsProps) => {
 
       <main className="px-6 py-8 max-w-5xl mx-auto space-y-6">
         <div className="space-y-1">
-          <div className="text-data text-primary font-mono">ALL REQUESTS</div>
-          <h2 className="text-xl font-semibold text-foreground">전체 진행 현황</h2>
+          <div className="text-data text-primary font-mono">{filterUser ? "MY PROGRESS" : "ALL REQUESTS"}</div>
+          <h2 className="text-xl font-semibold text-foreground">
+            {filterUser ? `${filterUser}님의 진행 현황` : "전체 진행 현황"}
+          </h2>
         </div>
 
         <div className="flex gap-3 flex-wrap">

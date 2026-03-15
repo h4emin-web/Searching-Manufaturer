@@ -85,7 +85,7 @@ async function apiLoadRequests(userName: string): Promise<SourcingRequest[]> {
 // ─── Component ───────────────────────────────────────────────
 const Index = () => {
   const [user, setUser] = useState<{ koreanName: string; englishName: string } | null>(null);
-  const [view, setView] = useState<"login" | "requests" | "sourcing" | "all-requests">("login");
+  const [view, setView] = useState<"login" | "requests" | "sourcing" | "all-requests" | "my-progress">("login");
 
   const [step, setStep] = useState<Step>("search");
   const [apiName, setApiName] = useState("");
@@ -327,6 +327,9 @@ const Index = () => {
   if (view === "all-requests" && user) {
     return <AllRequests onBack={() => setView("requests")} apiBase={API_BASE} />;
   }
+  if (view === "my-progress" && user) {
+    return <AllRequests onBack={() => setView("requests")} apiBase={API_BASE} filterUser={user.koreanName} />;
+  }
   if (view === "requests" && user) {
     return (
       <MyRequests
@@ -334,6 +337,7 @@ const Index = () => {
         onNewRequest={handleNewRequest}
         onViewRequest={handleViewRequest}
         onViewAll={() => setView("all-requests")}
+        onViewMyProgress={() => setView("my-progress")}
         apiBase={API_BASE}
       />
     );
