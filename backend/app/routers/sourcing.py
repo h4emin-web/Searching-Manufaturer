@@ -45,6 +45,15 @@ async def get_sourcing_status(task_id: str):
     return result
 
 
+@router.delete("/{task_id}")
+async def cancel_sourcing(task_id: str):
+    """소싱 태스크 취소"""
+    if task_id in _tasks:
+        _tasks[task_id].status = "failed"
+        _tasks[task_id].error = "cancelled"
+    return {"message": "cancelled"}
+
+
 async def _run_sourcing(task_id: str, req: SourcingRequest):
     """백그라운드 소싱 실행"""
     try:

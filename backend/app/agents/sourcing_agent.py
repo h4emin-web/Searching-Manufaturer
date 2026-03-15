@@ -10,10 +10,29 @@ from typing import AsyncIterator
 import structlog
 import httpx
 
+from pydantic import BaseModel
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIModel
 
 from ..models.schemas import RawManufacturer, LLMProvider, UseCase
+
+
+class _ManufacturerItem(BaseModel):
+    """pydantic-ai 결과 타입 (source_llm 제외 — 나중에 할당)"""
+    name: str
+    country: str
+    country_code: str | None = None
+    city: str | None = None
+    contact_email: str | None = None
+    contact_wechat: str | None = None
+    contact_whatsapp: str | None = None
+    website: str | None = None
+    certifications: list[str] = []
+    products: list[str] = []
+    annual_capacity_kg: float | None = None
+    established_year: int | None = None
+    confidence_score: float = 0.5
+    source_notes: str = ""
 from ..config import get_settings
 
 logger = structlog.get_logger()
@@ -176,14 +195,15 @@ async def _query_single_llm(
 
         agent = Agent(
             model=model,
-            result_type=list[RawManufacturer],
+            result_type=list[_ManufacturerItem],
             system_prompt=SOURCING_SYSTEM_PROMPT,
             retries=2,
         )
         result = await agent.run(prompt)
-        manufacturers = result.data
-        for m in manufacturers:
-            m.source_llm = provider
+        manufacturers = [
+            RawManufacturer(**item.model_dump(), source_llm=provider)
+            for item in result.data
+        ]
 
         logger.info("llm_sourcing_complete", provider=provider.value, count=len(manufacturers))
         return provider, manufacturers, None

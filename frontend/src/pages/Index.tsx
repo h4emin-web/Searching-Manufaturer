@@ -40,12 +40,42 @@ const getFlag = (country: string) =>
   country?.toLowerCase().includes("china") ? "🇨🇳" :
   country?.toLowerCase().includes("india") ? "🇮🇳" : "🌏");
 
+// ─── API helpers ──────────────────────────────────────────────
+async function apiSaveRequest(userName: string, req: SourcingRequest) {
+  try {
+    await fetch(`${API_BASE}/users/${encodeURIComponent(userName)}/requests`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ request: req }),
+    });
+  } catch { /* ignore */ }
+}
+
+async function apiUpdateRequest(userName: string, requestId: string, updates: Partial<SourcingRequest>) {
+  try {
+    await fetch(`${API_BASE}/users/${encodeURIComponent(userName)}/requests/${requestId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+  } catch { /* ignore */ }
+}
+
+async function apiLoadRequests(userName: string): Promise<SourcingRequest[]> {
+  try {
+    const res = await fetch(`${API_BASE}/users/${encodeURIComponent(userName)}/requests`);
+    if (!res.ok) return [];
+    return await res.json();
+  } catch {
+    return [];
+  }
+}
+
+// ─── Component ───────────────────────────────────────────────
 const Index = () => {
-  // Auth
   const [user, setUser] = useState<{ koreanName: string; englishName: string } | null>(null);
   const [view, setView] = useState<"login" | "requests" | "sourcing">("login");
 
-  // Sourcing flow
   const [step, setStep] = useState<Step>("search");
   const [apiName, setApiName] = useState("");
   const [purpose, setPurpose] = useState("");
@@ -56,6 +86,7 @@ const Index = () => {
   const [sourcingProgress, setSourcingProgress] = useState(0);
   const [sourcingError, setSourcingError] = useState("");
   const [currentRequestId, setCurrentRequestId] = useState<string>("");
+  const [currentTaskId, setCurrentTaskId] = useState<string>("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Load user from localStorage
@@ -76,11 +107,9 @@ const Index = () => {
 
   const handleNewRequest = () => {
     setStep("search");
-    setApiName("");
-    setPurpose("");
-    setRequirements([]);
-    setManufacturers([]);
-    setSourcingError("");
+    setApiName(""); setPurpose(""); setRequirements([]);
+    setManufacturers([]); setSourcingError("");
+    setCurrentRequestId(""); setCurrentTaskId("");
     setView("sourcing");
   };
 
@@ -89,51 +118,11 @@ const Index = () => {
     setPurpose(req.purpose);
     setRequirements(req.requirements);
     setCurrentRequestId(req.id);
-    if (req.status === "reviewing") {
-      setStep("results");
-    } else if (req.status === "monitoring" || req.status === "outreach") {
-      setStep("sourcing");
-    } else {
-      setStep("searching");
-    }
+    setCurrentTaskId(req.taskId || "");
+    if (req.status === "reviewing") setStep("results");
+    else if (req.status === "monitoring" || req.status === "outreach") setStep("sourcing");
+    else setStep("searching");
     setView("sourcing");
-  };
-
-  // Save request to localStorage
-  const saveRequest = (req: Partial<SourcingRequest>) => {
-    if (!user) return;
-    const key = `requests_${user.koreanName}`;
-    const stored = localStorage.getItem(key);
-    const requests: SourcingRequest[] = stored ? JSON.parse(stored) : [];
-    const existing = requests.findIndex(r => r.id === currentRequestId);
-    if (existing >= 0) {
-      requests[existing] = { ...requests[existing], ...req };
-    } else {
-      const newReq: SourcingRequest = {
-        id: currentRequestId,
-        ingredientName: apiName,
-        purpose,
-        requirements,
-        status: "searching",
-        createdAt: new Date().toISOString(),
-        ...req,
-      };
-      requests.unshift(newReq);
-    }
-    localStorage.setItem(key, JSON.stringify(requests));
-  };
-
-  const updateRequestStatus = (id: string, updates: Partial<SourcingRequest>) => {
-    if (!user) return;
-    const key = `requests_${user.koreanName}`;
-    const stored = localStorage.getItem(key);
-    if (!stored) return;
-    const requests: SourcingRequest[] = JSON.parse(stored);
-    const idx = requests.findIndex(r => r.id === id);
-    if (idx >= 0) {
-      requests[idx] = { ...requests[idx], ...updates };
-      localStorage.setItem(key, JSON.stringify(requests));
-    }
   };
 
   // Create session
@@ -149,15 +138,8 @@ const Index = () => {
       .catch(() => setSessionId("demo-" + Date.now()));
   }, [view]);
 
-  const handleSearch = (query: string) => {
-    setApiName(query);
-    setStep("purpose");
-  };
-
-  const handlePurpose = (p: string) => {
-    setPurpose(p);
-    setStep("requirements");
-  };
+  const handleSearch = (query: string) => { setApiName(query); setStep("purpose"); };
+  const handlePurpose = (p: string) => { setPurpose(p); setStep("requirements"); };
 
   const handleRequirements = (reqs: Record<string, boolean> | string[]) => {
     const selected = Array.isArray(reqs)
@@ -167,18 +149,26 @@ const Index = () => {
     setStep("region");
   };
 
-  const handleRegion = (selectedRegions: string[]) => {
-    setRegions(selectedRegions);
-    setStep("documents");
-  };
+  const handleRegion = (r: string[]) => { setRegions(r); setStep("documents"); };
 
   const handleDocuments = async () => {
     setStep("searching");
     setSourcingProgress(0);
     setSourcingError("");
+    if (pollRef.current) clearInterval(pollRef.current);
 
     const reqId = "req-" + Date.now();
     setCurrentRequestId(reqId);
+
+    // Save initial request
+    if (user) {
+      const newReq: SourcingRequest = {
+        id: reqId, ingredientName: apiName, purpose,
+        requirements, status: "searching",
+        createdAt: new Date().toISOString(),
+      };
+      await apiSaveRequest(user.koreanName, newReq);
+    }
 
     try {
       const res = await fetch(`${API_BASE}/sourcing/run`, {
@@ -196,9 +186,8 @@ const Index = () => {
       });
       const data = await res.json();
       const taskId = data.task_id;
-
-      // Save request
-      saveRequest({ id: reqId, taskId, status: "searching" });
+      setCurrentTaskId(taskId);
+      if (user) await apiUpdateRequest(user.koreanName, reqId, { taskId });
 
       pollRef.current = setInterval(async () => {
         try {
@@ -210,11 +199,8 @@ const Index = () => {
             clearInterval(pollRef.current!);
             const mfrs: Manufacturer[] = (statusData.deduplicated || []).map((m: any) => ({
               id: m.id || m.canonical_name || Math.random().toString(),
-              name: m.name,
-              country: m.country,
-              city: m.city,
-              contact_email: m.contact_email,
-              website: m.website,
+              name: m.name, country: m.country, city: m.city,
+              contact_email: m.contact_email, website: m.website,
               web_form_url: m.web_form_url,
               certifications: m.certifications || [],
               source_llms: m.source_llms || [],
@@ -222,11 +208,18 @@ const Index = () => {
               is_excluded: false,
             }));
             setManufacturers(mfrs);
-            updateRequestStatus(reqId, { status: "reviewing", totalFound: statusData.total_deduplicated });
+            if (user) await apiUpdateRequest(user.koreanName, reqId, {
+              status: "reviewing", totalFound: statusData.total_deduplicated
+            });
             setStep("results");
           } else if (statusData.status === "failed") {
             clearInterval(pollRef.current!);
-            setSourcingError("검색 중 오류가 발생했습니다.");
+            if (statusData.error === "cancelled") {
+              setStep("search");
+              setView("requests");
+            } else {
+              setSourcingError("검색 중 오류가 발생했습니다.");
+            }
           }
         } catch {
           clearInterval(pollRef.current!);
@@ -234,45 +227,55 @@ const Index = () => {
         }
       }, 2000);
     } catch {
-      setSourcingError("검색 시작 실패");
+      setSourcingError("검색 시작 실패. 백엔드 서버를 확인해주세요.");
     }
   };
 
-  const handleStartSourcing = (selected: string[], excluded: string[]) => {
+  // Cancel sourcing
+  const handleCancel = async () => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    if (currentTaskId) {
+      try {
+        await fetch(`${API_BASE}/sourcing/${currentTaskId}`, { method: "DELETE" });
+      } catch { /* ignore */ }
+    }
+    if (user && currentRequestId) {
+      await apiUpdateRequest(user.koreanName, currentRequestId, { status: "searching" });
+    }
+    setView("requests");
+  };
+
+  const handleStartSourcing = async (selected: string[], excluded: string[]) => {
     setManufacturers(prev => prev.map(m => ({ ...m, is_excluded: excluded.includes(m.id) })));
-    updateRequestStatus(currentRequestId, { status: "monitoring", sent: selected.length, replied: 0 });
+    if (user && currentRequestId) {
+      await apiUpdateRequest(user.koreanName, currentRequestId, {
+        status: "monitoring", sent: selected.length, replied: 0,
+      });
+    }
     setStep("sourcing");
   };
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
-  // Render login
-  if (view === "login") {
-    return <LoginStep onLogin={handleLogin} />;
-  }
-
-  // Render my requests
+  if (view === "login") return <LoginStep onLogin={handleLogin} />;
   if (view === "requests" && user) {
     return (
       <MyRequests
         user={user}
         onNewRequest={handleNewRequest}
         onViewRequest={handleViewRequest}
+        apiBase={API_BASE}
       />
     );
   }
 
-  // Render sourcing flow
   const progressWidth =
-    step === "purpose" ? "20%" :
-    step === "requirements" ? "40%" :
-    step === "region" ? "60%" :
-    step === "documents" ? "80%" :
+    step === "purpose" ? "20%" : step === "requirements" ? "40%" :
+    step === "region" ? "60%" : step === "documents" ? "80%" :
     (step === "searching" || step === "results" || step === "sourcing") ? "100%" : "0%";
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="border-b border-border px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-2 h-2 rounded-full bg-primary" />
@@ -294,7 +297,7 @@ const Index = () => {
               새 소싱
             </button>
           )}
-          <div className="text-data text-muted-foreground font-mono">
+          <span className="text-data text-muted-foreground font-mono">
             {user?.koreanName} —{" "}
             {step === "search" && "원료 입력"}
             {step === "purpose" && "Step 1/5"}
@@ -304,18 +307,16 @@ const Index = () => {
             {step === "searching" && "AI 검색 중..."}
             {step === "results" && "Step 5/5"}
             {step === "sourcing" && "소싱 진행 중"}
-          </div>
+          </span>
         </div>
       </header>
 
-      {/* Progress bar */}
       {step !== "search" && (
         <div className="h-[2px] bg-secondary">
           <div className="h-full bg-primary transition-all duration-500" style={{ width: progressWidth }} />
         </div>
       )}
 
-      {/* Main content */}
       <main className={`px-6 py-8 ${step === "sourcing" ? "pb-60" : ""}`}>
         <AnimatePresence mode="wait">
           {step === "search" && <SearchStep key="search" onSearch={handleSearch} />}
@@ -337,9 +338,14 @@ const Index = () => {
               {sourcingError ? (
                 <div className="text-center space-y-4">
                   <p className="text-accent text-ui">{sourcingError}</p>
-                  <button onClick={handleDocuments} className="text-data text-primary hover:underline cursor-pointer">
-                    다시 시도
-                  </button>
+                  <div className="flex gap-3 justify-center">
+                    <button onClick={handleDocuments} className="bg-primary text-primary-foreground px-5 py-2 rounded-sm text-ui font-semibold hover:opacity-90">
+                      다시 시도
+                    </button>
+                    <button onClick={() => setView("requests")} className="glass-surface px-5 py-2 rounded-sm text-ui text-muted-foreground hover:text-foreground">
+                      목록으로
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <>
@@ -352,6 +358,7 @@ const Index = () => {
                       Gemini와 Qwen이 전 세계 제조소를 병렬로 검색하고 있습니다...
                     </p>
                   </div>
+
                   <div className="w-full max-w-md space-y-4">
                     <div className="flex justify-between text-data text-muted-foreground font-mono">
                       <span>검색 진행률</span>
@@ -376,6 +383,14 @@ const Index = () => {
                       ))}
                     </div>
                   </div>
+
+                  {/* 중단 버튼 */}
+                  <button
+                    onClick={handleCancel}
+                    className="glass-surface hover:glass-surface-hover px-6 py-2.5 rounded-sm text-ui text-muted-foreground hover:text-destructive transition-colors cursor-pointer border border-border hover:border-destructive/30"
+                  >
+                    ✕ 검색 중단
+                  </button>
                 </>
               )}
             </motion.div>

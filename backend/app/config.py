@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     API_PREFIX: str = "/api/v1"
     PORT: int = 8002
-    CORS_ORIGINS: list[str] = ["http://localhost:3000", "https://pharma-sourcing.vercel.app"]
+    CORS_ORIGINS: list[str] = ["*"]
 
     # Database (Supabase / PostgreSQL)
     DATABASE_URL: str = "postgresql+asyncpg://postgres:password@localhost:5432/pharma_sourcing"

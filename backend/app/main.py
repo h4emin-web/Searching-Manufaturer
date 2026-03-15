@@ -5,7 +5,7 @@ import asyncio
 import structlog
 
 from .config import get_settings
-from .routers import sessions, sourcing, outreach, regulatory, dashboard, debug
+from .routers import sessions, sourcing, outreach, regulatory, dashboard, debug, users
 from .services.email_receiver import start_polling
 from .services.reply_handler import handle_reply
 
@@ -43,8 +43,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -56,6 +56,7 @@ app.include_router(sourcing.router,   prefix=f"{settings.API_PREFIX}/sourcing", 
 app.include_router(outreach.router,   prefix=f"{settings.API_PREFIX}/outreach",    tags=["Outreach"])
 app.include_router(dashboard.router,  prefix=f"{settings.API_PREFIX}/dashboard",   tags=["Dashboard"])
 app.include_router(debug.router,      prefix=f"{settings.API_PREFIX}/debug",       tags=["Debug"])
+app.include_router(users.router,      prefix=f"{settings.API_PREFIX}/users",       tags=["Users"])
 
 
 @app.get("/health")
