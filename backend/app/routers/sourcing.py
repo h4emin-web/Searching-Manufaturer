@@ -66,6 +66,7 @@ async def _run_sourcing(task_id: str, req: SourcingRequest):
             use_case=req.use_case,
             regulatory_requirements=req.regulatory_requirements,
             sourcing_notes=req.sourcing_notes,
+            regions=req.regions,
             providers=req.llm_providers,
         )
         _tasks[task_id].progress = 70

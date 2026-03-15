@@ -47,20 +47,47 @@ SYSTEM_PROMPT = (
 )
 
 
+_REGION_MAP = {
+    "china":  "China (including Hong Kong)",
+    "india":  "India",
+    "europe": "Europe (Germany, Italy, Netherlands, France, Spain, UK)",
+    "usa":    "USA",
+    "korea":  "South Korea",
+    "other":  "Japan, Taiwan, and other countries",
+}
+
+
 def _build_prompt(
     ingredient: str,
     use_case: UseCase,
     regulatory_requirements: list[str],
+    regions: list[str] | None = None,
     sourcing_notes: str = "",
 ) -> str:
     req_list = ", ".join(regulatory_requirements) if regulatory_requirements else "Standard GMP"
-    notes = f"\nSpecial notes: {sourcing_notes}" if sourcing_notes.strip() else ""
+    notes = f"\nSourcing context: {sourcing_notes}" if sourcing_notes.strip() else ""
+
+    if regions:
+        region_str = ", ".join(_REGION_MAP.get(r.lower(), r) for r in regions)
+        region_instruction = (
+            f"ONLY include manufacturers physically located in: {region_str}. "
+            f"Do NOT include manufacturers from any other country."
+        )
+    else:
+        region_instruction = "Focus on China, India, Europe (Germany, Italy, Netherlands), USA."
+
     return (
-        f"Find manufacturers of: {ingredient}\n"
+        f"Task: Find REAL, VERIFIED manufacturers that ACTUALLY PRODUCE '{ingredient}'.\n"
         f"Use case: {use_case.value}\n"
-        f"Required certifications: {req_list}{notes}\n"
-        f"Focus on China, India, Europe (Germany, Italy, Netherlands), USA.\n"
-        f"Return minimum 10 manufacturers."
+        f"Required certifications: {req_list}\n"
+        f"Region constraint: {region_instruction}\n"
+        f"{notes}\n"
+        f"CRITICAL rules:\n"
+        f"- Only include companies that CURRENTLY manufacture '{ingredient}' as a product line.\n"
+        f"- Do NOT include distributors, traders, or resellers.\n"
+        f"- Do NOT include companies that only mention '{ingredient}' as an ingredient in their products.\n"
+        f"- If you are not certain a company manufactures '{ingredient}', exclude them.\n"
+        f"- Include 10-15 manufacturers. Return ONLY valid JSON.\n"
     )
 
 
@@ -230,6 +257,7 @@ async def run_multi_llm_sourcing(
     providers: list[LLMProvider] | None = None,
     ingredient_zh: str | None = None,
     sourcing_notes: str = "",
+    regions: list[str] | None = None,
     progress_callback=None,
 ) -> dict:
     if providers is None:
@@ -239,6 +267,7 @@ async def run_multi_llm_sourcing(
         ingredient=ingredient,
         use_case=use_case,
         regulatory_requirements=regulatory_requirements,
+        regions=regions,
         sourcing_notes=sourcing_notes,
     )
 

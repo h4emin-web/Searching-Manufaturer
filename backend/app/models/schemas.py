@@ -130,6 +130,7 @@ class SourcingRequest(BaseModel):
     ingredient_name: str
     use_case: UseCase
     regulatory_requirements: list[str] = Field(default_factory=list)
+    regions: list[str] = Field(default_factory=list)
     sourcing_notes: str = ""
     llm_providers: list[LLMProvider] = Field(
         default_factory=lambda: [LLMProvider.GEMINI]
