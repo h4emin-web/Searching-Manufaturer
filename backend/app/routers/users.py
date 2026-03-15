@@ -25,6 +25,7 @@ class UserRequest(BaseModel):
     sent: int = 0
     replied: int = 0
     created_at: str
+    notes: list[str] = []
 
 
 class SaveRequestBody(BaseModel):
@@ -37,6 +38,7 @@ class UpdateRequestBody(BaseModel):
     total_found: Optional[int] = None
     sent: Optional[int] = None
     replied: Optional[int] = None
+    notes: Optional[list[str]] = None
 
 
 @router.get("/requests/all")
@@ -49,6 +51,8 @@ async def get_all_requests():
             for row in rows:
                 if isinstance(row.get("requirements"), str):
                     row["requirements"] = json.loads(row["requirements"])
+                if isinstance(row.get("notes"), str):
+                    row["notes"] = json.loads(row["notes"])
             rows.sort(key=lambda x: x.get("created_at", ""), reverse=True)
             return rows
         except Exception:
@@ -68,10 +72,11 @@ async def get_user_requests(user_name: str):
     if db:
         try:
             rows = await db.select("user_requests", {"user_name": user_name})
-            # requirements는 JSON 문자열로 저장됨
             for row in rows:
                 if isinstance(row.get("requirements"), str):
                     row["requirements"] = json.loads(row["requirements"])
+                if isinstance(row.get("notes"), str):
+                    row["notes"] = json.loads(row["notes"])
             rows.sort(key=lambda x: x.get("created_at", ""), reverse=True)
             return rows
         except Exception:
@@ -99,6 +104,7 @@ async def save_user_request(user_name: str, body: SaveRequestBody):
                 "sent": req.sent,
                 "replied": req.replied,
                 "created_at": req.created_at,
+                "notes": json.dumps(req.notes),
             })
             return {"ok": True}
         except Exception:
@@ -118,6 +124,8 @@ async def save_user_request(user_name: str, body: SaveRequestBody):
 async def update_user_request(user_name: str, request_id: str, body: UpdateRequestBody):
     """소싱 요청 상태 업데이트"""
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if "notes" in updates:
+        updates["notes"] = json.dumps(updates["notes"])
     db = get_supabase()
     if db:
         try:

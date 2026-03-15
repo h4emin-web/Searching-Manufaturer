@@ -107,13 +107,13 @@ async def _query_gemini_native(
     model = "gemini-1.5-flash-latest"
     url = f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent"
     payload = {
+        "system_instruction": {"parts": [{"text": system_prompt}]},
         "contents": [
-            {"role": "user", "parts": [{"text": f"{system_prompt}\n\n{user_prompt}"}]}
+            {"role": "user", "parts": [{"text": user_prompt}]}
         ],
         "generationConfig": {
-            "responseMimeType": "application/json",
             "temperature": 0.2,
-            "maxOutputTokens": 4096,
+            "maxOutputTokens": 8192,
         },
     }
     async with httpx.AsyncClient(timeout=timeout) as client:
@@ -122,6 +122,8 @@ async def _query_gemini_native(
             params={"key": api_key},
             json=payload,
         )
+        if not resp.is_success:
+            logger.error("gemini_api_error", status=resp.status_code, body=resp.text[:500])
         resp.raise_for_status()
         content = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
         result = _extract_manufacturers(content)

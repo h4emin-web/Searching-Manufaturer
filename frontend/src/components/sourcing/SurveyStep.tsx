@@ -2,6 +2,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 
 export interface SurveyData {
+  clientName: string;
   clientSituation: string;
   clientSituationOther: string;
   ingredientUse: string;
@@ -24,6 +25,7 @@ const CLIENT_SITUATIONS = [
 ];
 
 const SurveyStep = ({ onSubmit, onBack }: SurveyStepProps) => {
+  const [clientName, setClientName] = useState("");
   const [clientSituation, setClientSituation] = useState("");
   const [clientSituationOther, setClientSituationOther] = useState("");
   const [ingredientUse, setIngredientUse] = useState("");
@@ -32,11 +34,12 @@ const SurveyStep = ({ onSubmit, onBack }: SurveyStepProps) => {
   const [confidentialInfo, setConfidentialInfo] = useState("");
   const [specialNotes, setSpecialNotes] = useState("");
 
-  const canSubmit = clientSituation !== "" && ingredientUse.trim() !== "" && endUserDisclosure !== "";
+  const canSubmit = clientName.trim() !== "" && clientSituation !== "" && ingredientUse.trim() !== "" && endUserDisclosure !== "";
 
   const handleSubmit = () => {
     if (!canSubmit) return;
     onSubmit({
+      clientName,
       clientSituation,
       clientSituationOther,
       ingredientUse,
@@ -59,6 +62,17 @@ const SurveyStep = ({ onSubmit, onBack }: SurveyStepProps) => {
         <button onClick={onBack} className="text-data text-muted-foreground hover:text-foreground transition-colors">← 뒤로</button>
         <div className="text-data text-primary font-mono">STEP 2/6 — 소싱 현황</div>
         <h2 className="text-xl font-semibold text-foreground">소싱 배경을 알려주세요</h2>
+      </div>
+
+      {/* Q0 고객사명 */}
+      <div className="space-y-2">
+        <div className="text-ui font-semibold text-foreground">고객사명</div>
+        <input
+          value={clientName}
+          onChange={(e) => setClientName(e.target.value)}
+          placeholder="고객사명을 입력하세요"
+          className="w-full glass-surface rounded-sm px-4 py-2.5 text-foreground text-ui bg-transparent focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/50"
+        />
       </div>
 
       {/* Q1 고객사 현황 */}

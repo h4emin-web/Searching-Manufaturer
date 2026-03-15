@@ -6,12 +6,13 @@ export interface SourcingRequest {
   ingredientName: string;
   purpose: string;
   requirements: string[];
-  status: "searching" | "reviewing" | "outreach" | "monitoring" | "completed";
+  status: "searching" | "reviewing" | "outreach" | "monitoring" | "negotiating" | "completed";
   createdAt: string;
   taskId?: string;
   totalFound?: number;
   replied?: number;
   sent?: number;
+  notes?: string[];
 }
 
 interface MyRequestsProps {
@@ -24,19 +25,21 @@ interface MyRequestsProps {
 }
 
 const STATUS_LABEL: Record<SourcingRequest["status"], string> = {
-  searching:  "AI 검색 중",
-  reviewing:  "제조소 검토 대기",
-  outreach:   "연락 발송 중",
-  monitoring: "응답 대기 중",
-  completed:  "완료",
+  searching:    "AI 검색 중",
+  reviewing:    "제조소 검토 대기",
+  outreach:     "연락 발송 중",
+  monitoring:   "응답 대기 중",
+  negotiating:  "연락 중",
+  completed:    "완료",
 };
 
 const STATUS_COLOR: Record<SourcingRequest["status"], string> = {
-  searching:  "text-foreground",
-  reviewing:  "text-accent",
-  outreach:   "text-foreground",
-  monitoring: "text-foreground",
-  completed:  "text-muted-foreground",
+  searching:    "text-foreground",
+  reviewing:    "text-accent",
+  outreach:     "text-foreground",
+  monitoring:   "text-foreground",
+  negotiating:  "text-foreground",
+  completed:    "text-muted-foreground",
 };
 
 const PURPOSE_LABEL: Record<string, string> = {
@@ -65,6 +68,7 @@ const MyRequests = ({ user, onNewRequest, onViewRequest, onViewAll, onViewMyProg
           totalFound: r.total_found ?? r.totalFound,
           replied: r.replied,
           sent: r.sent,
+          notes: r.notes ?? [],
         }));
         setRequests(mapped);
       }
@@ -196,9 +200,21 @@ const MyRequests = ({ user, onNewRequest, onViewRequest, onViewAll, onViewMyProg
                       </div>
                     </div>
 
-                    {(req.status === "searching" || req.status === "outreach" || req.status === "monitoring") && (
+                    {(req.status === "searching" || req.status === "outreach" || req.status === "monitoring" || req.status === "negotiating") && (
                       <div className="mt-3 h-[1px] bg-secondary overflow-hidden">
                         <div className="scanning-line h-full w-full" />
+                      </div>
+                    )}
+
+                    {/* 현재 진행상황 노트 */}
+                    {req.notes && req.notes.length > 0 && (
+                      <div className="mt-3 space-y-1">
+                        {req.notes.map((note, ni) => (
+                          <div key={ni} className="text-data text-muted-foreground flex gap-2">
+                            <span className="text-foreground font-mono shrink-0">{ni + 1}.</span>
+                            <span>{note}</span>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>

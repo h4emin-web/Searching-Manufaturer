@@ -132,7 +132,7 @@ class SourcingRequest(BaseModel):
     regulatory_requirements: list[str] = Field(default_factory=list)
     sourcing_notes: str = ""
     llm_providers: list[LLMProvider] = Field(
-        default_factory=lambda: [LLMProvider.GEMINI, LLMProvider.QWEN]
+        default_factory=lambda: [LLMProvider.GEMINI]
     )
 
 

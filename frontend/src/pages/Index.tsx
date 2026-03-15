@@ -277,6 +277,7 @@ const Index = () => {
           regulatory_requirements: requirements,
           regions,
           sourcing_notes: surveyData ? [
+            surveyData.clientName ? `[고객사명] ${surveyData.clientName}` : "",
             `[고객사 현황] ${surveyData.clientSituation === "기타" ? surveyData.clientSituationOther || "기타" : surveyData.clientSituation}`,
             `[원료 사용 용도] ${surveyData.ingredientUse}`,
             `[End User 공개] ${surveyData.endUserDisclosure}${surveyData.endUserDisclosure === "불가능" && surveyData.disclosureTo ? ` — ${surveyData.disclosureTo}로 공개` : ""}`,

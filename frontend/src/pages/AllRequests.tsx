@@ -11,6 +11,7 @@ interface AllRequest {
   sent: number;
   replied: number;
   created_at: string;
+  notes: string[];
 }
 
 interface AllRequestsProps {
@@ -25,15 +26,16 @@ const PURPOSE_LABEL: Record<string, string> = {
 
 // 진행 단계 정의
 const STEPS = [
-  { key: "searching",  label: "AI 검색" },
-  { key: "reviewing",  label: "제조소 검토" },
-  { key: "outreach",   label: "연락 발송" },
-  { key: "monitoring", label: "응답 대기" },
-  { key: "completed",  label: "완료" },
+  { key: "searching",    label: "AI 검색" },
+  { key: "reviewing",    label: "제조소 검토" },
+  { key: "outreach",     label: "연락 발송" },
+  { key: "monitoring",   label: "응답 대기" },
+  { key: "negotiating",  label: "연락 중" },
+  { key: "completed",    label: "완료" },
 ];
 
 const STATUS_ORDER: Record<string, number> = {
-  searching: 0, reviewing: 1, outreach: 2, monitoring: 3, completed: 4,
+  searching: 0, reviewing: 1, outreach: 2, monitoring: 3, negotiating: 4, completed: 5,
 };
 
 function ProgressSteps({ status }: { status: string }) {
@@ -74,6 +76,25 @@ const AllRequests = ({ onBack, apiBase, filterUser }: AllRequestsProps) => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [noteInputs, setNoteInputs] = useState<Record<string, string>>({});
+  const [savingNote, setSavingNote] = useState<string | null>(null);
+
+  const handleAddNote = async (req: AllRequest) => {
+    const text = noteInputs[req.id]?.trim();
+    if (!text) return;
+    setSavingNote(req.id);
+    const newNotes = [...(req.notes || []), text];
+    try {
+      await fetch(`${apiBase}/users/${encodeURIComponent(req.user_name)}/requests/${req.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: newNotes }),
+      });
+      setRequests(prev => prev.map(r => r.id === req.id ? { ...r, notes: newNotes } : r));
+      setNoteInputs(prev => ({ ...prev, [req.id]: "" }));
+    } catch { /* ignore */ }
+    setSavingNote(null);
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -96,6 +117,7 @@ const AllRequests = ({ onBack, apiBase, filterUser }: AllRequestsProps) => {
             sent: r.sent ?? 0,
             replied: r.replied ?? 0,
             created_at: r.created_at ?? r.createdAt ?? "",
+            notes: r.notes ?? [],
           })));
         }
       } catch { /* ignore */ }
@@ -149,6 +171,7 @@ const AllRequests = ({ onBack, apiBase, filterUser }: AllRequestsProps) => {
             <option value="reviewing">제조소 검토 대기</option>
             <option value="outreach">연락 발송 중</option>
             <option value="monitoring">응답 대기</option>
+            <option value="negotiating">연락 중</option>
             <option value="completed">완료</option>
           </select>
         </div>
@@ -194,9 +217,39 @@ const AllRequests = ({ onBack, apiBase, filterUser }: AllRequestsProps) => {
                       )}
                     </div>
                     <ProgressSteps status={req.status} />
+
+                    {/* 현재 진행상황 노트 */}
+                    {(req.notes && req.notes.length > 0) && (
+                      <div className="mt-3 space-y-1">
+                        {req.notes.map((note, ni) => (
+                          <div key={ni} className="text-data text-muted-foreground flex gap-2">
+                            <span className="text-foreground font-mono shrink-0">{ni + 1}.</span>
+                            <span>{note}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* 노트 입력 */}
+                    <div className="mt-3 flex gap-2">
+                      <input
+                        value={noteInputs[req.id] || ""}
+                        onChange={(e) => setNoteInputs(prev => ({ ...prev, [req.id]: e.target.value }))}
+                        onKeyDown={(e) => { if (e.key === "Enter") handleAddNote(req); }}
+                        placeholder="진행상황 메모 추가..."
+                        className="flex-1 glass-surface rounded-sm px-3 py-1.5 text-foreground text-data bg-transparent focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/40"
+                      />
+                      <button
+                        onClick={() => handleAddNote(req)}
+                        disabled={savingNote === req.id || !noteInputs[req.id]?.trim()}
+                        className="px-3 py-1.5 rounded-sm text-data bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-40 transition-opacity"
+                      >
+                        추가
+                      </button>
+                    </div>
                   </div>
                   <div className="shrink-0 text-right">
-                    {(req.status === "searching" || req.status === "outreach" || req.status === "monitoring") && (
+                    {(req.status === "searching" || req.status === "outreach" || req.status === "monitoring" || req.status === "negotiating") && (
                       <div className="w-16 h-[2px] overflow-hidden rounded-full bg-secondary">
                         <div className="scanning-line h-full w-full" />
                       </div>
