@@ -70,27 +70,39 @@ def _extract_manufacturers(text: str) -> list[dict]:
     import re
     # 마크다운 코드블록 제거
     text = re.sub(r"```(?:json)?\s*", "", text).strip().rstrip("`").strip()
-    try:
-        data = json.loads(text)
-        if isinstance(data, list):
+
+    def _from_parsed(data) -> list[dict] | None:
+        if isinstance(data, list) and data:
             return data
         if isinstance(data, dict):
-            # {"manufacturers": [...]} 형태
-            for key in ("manufacturers", "results", "data", "items"):
-                if key in data and isinstance(data[key], list):
+            # 알려진 키 우선
+            for key in ("manufacturers", "results", "data", "items", "companies", "suppliers"):
+                if key in data and isinstance(data[key], list) and data[key]:
                     return data[key]
+            # 딕셔너리 내 첫 번째 list 값 사용
+            for v in data.values():
+                if isinstance(v, list) and v and isinstance(v[0], dict):
+                    return v
+        return None
+
+    try:
+        result = _from_parsed(json.loads(text))
+        if result is not None:
+            return result
     except json.JSONDecodeError:
-        # JSON 블록 탐색
-        match = re.search(r"\{[\s\S]*\}", text)
+        pass
+
+    # JSON 블록 탐색 (텍스트 안에 포함된 경우)
+    for pattern in (r"\[[\s\S]*\]", r"\{[\s\S]*\}"):
+        match = re.search(pattern, text)
         if match:
             try:
-                data = json.loads(match.group())
-                if isinstance(data, dict):
-                    for key in ("manufacturers", "results", "data", "items"):
-                        if key in data and isinstance(data[key], list):
-                            return data[key]
+                result = _from_parsed(json.loads(match.group()))
+                if result is not None:
+                    return result
             except Exception:
                 pass
+
     return []
 
 
@@ -131,12 +143,13 @@ async def _query_gemini_native(
                     errors.append(f"{model} → {resp.status_code}: {resp.text[:200]}")
                     logger.warning("gemini_attempt_failed", model=model, status=resp.status_code)
                     continue
-                content = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-                logger.info("gemini_raw_response", model=model, preview=content[:500])
+                rjson = resp.json()
+                content = rjson["candidates"][0]["content"]["parts"][0]["text"]
+                logger.info("gemini_raw_response", model=model, preview=content[:600])
                 result = _extract_manufacturers(content)
-                logger.info("gemini_success", model=model, count=len(result))
                 if not result:
-                    logger.warning("gemini_parse_failed", model=model, content=content[:800])
+                    raise ValueError(f"0 manufacturers parsed from: {content[:400]}")
+                logger.info("gemini_success", model=model, count=len(result))
                 return result
             except Exception as e:
                 errors.append(f"{model}: {e}")
