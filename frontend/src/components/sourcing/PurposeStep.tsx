@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 interface PurposeStepProps {
   apiName: string;
   onSelect: (purpose: string) => void;
+  onBack: () => void;
 }
 
 const purposes = [
@@ -26,7 +27,7 @@ const purposes = [
   },
 ];
 
-const PurposeStep = ({ apiName, onSelect }: PurposeStepProps) => {
+const PurposeStep = ({ apiName, onSelect, onBack }: PurposeStepProps) => {
   return (
     <motion.div
       initial={{ opacity: 0, x: 40 }}
@@ -36,9 +37,10 @@ const PurposeStep = ({ apiName, onSelect }: PurposeStepProps) => {
       className="max-w-2xl mx-auto space-y-6"
     >
       <div className="space-y-2">
+        <button onClick={onBack} className="text-data text-muted-foreground hover:text-foreground transition-colors mb-1">← 뒤로</button>
         <div className="text-data text-primary font-mono">STEP 1/5 — 용도 선택</div>
         <h2 className="text-xl font-semibold text-foreground">
-          <span className="text-primary font-mono">{apiName}</span>의 사용 용도를 선택하세요
+          <span className="text-foreground font-mono">{apiName}</span>의 사용 용도를 선택하세요
         </h2>
         <p className="text-muted-foreground text-ui">
           용도에 따라 필요한 규제 요건과 인증 조건이 달라집니다.

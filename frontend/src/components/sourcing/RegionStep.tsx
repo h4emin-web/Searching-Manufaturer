@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 
 interface RegionStepProps {
   onSubmit: (regions: string[]) => void;
+  onBack: () => void;
 }
 
 const regions = [
@@ -14,7 +15,7 @@ const regions = [
   { id: "other", label: "기타", flag: "🌏", count: "500+ 제조소", description: "일본, 대만, 이스라엘 등" },
 ];
 
-const RegionStep = ({ onSubmit }: RegionStepProps) => {
+const RegionStep = ({ onSubmit, onBack }: RegionStepProps) => {
   const [selected, setSelected] = useState<string[]>([]);
 
   const toggle = (id: string) => {
@@ -32,6 +33,7 @@ const RegionStep = ({ onSubmit }: RegionStepProps) => {
       className="max-w-2xl mx-auto space-y-6"
     >
       <div className="space-y-2">
+        <button onClick={onBack} className="text-data text-muted-foreground hover:text-foreground transition-colors mb-1">← 뒤로</button>
         <div className="text-data text-primary font-mono">STEP 3/5 — 제조소 지역</div>
         <h2 className="text-xl font-semibold text-foreground">소싱 대상 지역을 선택하세요</h2>
         <p className="text-muted-foreground text-ui">복수 선택 가능합니다. 선택한 지역의 제조소를 우선 탐색합니다.</p>

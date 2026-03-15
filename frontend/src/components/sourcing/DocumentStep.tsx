@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 
 interface DocumentStepProps {
   onSubmit: (docs: { documents: string[]; sampleAmount: string; customNote: string }) => void;
+  onBack: () => void;
 }
 
 const documentOptions = [
@@ -15,7 +16,7 @@ const documentOptions = [
   { id: "stability", label: "안정성 자료", description: "Stability Study Data" },
 ];
 
-const DocumentStep = ({ onSubmit }: DocumentStepProps) => {
+const DocumentStep = ({ onSubmit, onBack }: DocumentStepProps) => {
   const [selected, setSelected] = useState<string[]>(["coa", "msds", "sample"]);
   const [sampleAmount, setSampleAmount] = useState("최대한 많이 (무상 제공)");
   const [customNote, setCustomNote] = useState("");
@@ -36,6 +37,7 @@ const DocumentStep = ({ onSubmit }: DocumentStepProps) => {
       className="max-w-2xl mx-auto space-y-6"
     >
       <div className="space-y-2">
+        <button onClick={onBack} className="text-data text-muted-foreground hover:text-foreground transition-colors mb-1">← 뒤로</button>
         <div className="text-data text-primary font-mono">STEP 4/5 — 요청 서류</div>
         <h2 className="text-xl font-semibold text-foreground">제조소에 요청할 서류를 선택하세요</h2>
         <p className="text-muted-foreground text-ui">기본 항목이 선택되어 있습니다. 추가/제거할 수 있습니다.</p>

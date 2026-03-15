@@ -39,6 +39,28 @@ class UpdateRequestBody(BaseModel):
     replied: Optional[int] = None
 
 
+@router.get("/requests/all")
+async def get_all_requests():
+    """모든 사용자의 소싱 요청 목록 조회"""
+    db = get_supabase()
+    if db:
+        try:
+            rows = await db.select("user_requests")
+            for row in rows:
+                if isinstance(row.get("requirements"), str):
+                    row["requirements"] = json.loads(row["requirements"])
+            rows.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+            return rows
+        except Exception:
+            pass
+    # 폴백 - 모든 사용자 합산
+    all_rows: list[dict] = []
+    for reqs in _memory.values():
+        all_rows.extend(reqs)
+    all_rows.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    return all_rows
+
+
 @router.get("/{user_name}/requests")
 async def get_user_requests(user_name: str):
     """사용자의 소싱 요청 목록 조회"""

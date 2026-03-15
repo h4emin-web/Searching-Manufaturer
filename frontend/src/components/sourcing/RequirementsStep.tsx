@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 interface RequirementsStepProps {
   purpose: string;
   onSubmit: (requirements: Record<string, boolean>) => void;
+  onBack: () => void;
 }
 
 const requirementsByPurpose: Record<string, { id: string; label: string }[]> = {
@@ -30,7 +31,7 @@ const requirementsByPurpose: Record<string, { id: string; label: string }[]> = {
   ],
 };
 
-const RequirementsStep = ({ purpose, onSubmit }: RequirementsStepProps) => {
+const RequirementsStep = ({ purpose, onSubmit, onBack }: RequirementsStepProps) => {
   const [requirements, setRequirements] = useState(requirementsByPurpose[purpose] || []);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [customInput, setCustomInput] = useState("");
@@ -64,6 +65,7 @@ const RequirementsStep = ({ purpose, onSubmit }: RequirementsStepProps) => {
       className="max-w-2xl mx-auto space-y-6"
     >
       <div className="space-y-2">
+        <button onClick={onBack} className="text-data text-muted-foreground hover:text-foreground transition-colors mb-1">← 뒤로</button>
         <div className="text-data text-primary font-mono">STEP 2/5 — 규제 요건</div>
         <h2 className="text-xl font-semibold text-foreground">필요한 인증 및 규제 요건을 선택하세요</h2>
         <p className="text-muted-foreground text-ui">
@@ -125,19 +127,6 @@ const RequirementsStep = ({ purpose, onSubmit }: RequirementsStepProps) => {
         </button>
       </div>
 
-      {purpose === "pharma" && !selected["kdmf"] && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "auto" }}
-          className="glass-surface rounded-sm p-3 flex items-start gap-2"
-          style={{ borderColor: 'hsl(25, 100%, 50%, 0.4)' }}
-        >
-          <span className="text-accent">⚠</span>
-          <div className="text-data text-accent">
-            KDMF 미등록 시 국내 수입이 불가합니다. 국내 판매 목적이라면 KDMF 등록 가능 여부를 반드시 확인하세요.
-          </div>
-        </motion.div>
-      )}
     </motion.div>
   );
 };

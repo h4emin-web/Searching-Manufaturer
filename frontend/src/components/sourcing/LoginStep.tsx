@@ -52,7 +52,7 @@ const LoginStep = ({ onLogin }: LoginStepProps) => {
                   type="text"
                   value={koreanName}
                   onChange={(e) => setKoreanName(e.target.value)}
-                  placeholder="예: 강해민"
+                  placeholder=""
                   autoFocus
                   className="w-full bg-transparent px-4 py-3.5 text-foreground placeholder:text-muted-foreground focus:outline-none text-ui text-center text-lg tracking-widest"
                 />
@@ -85,7 +85,7 @@ const LoginStep = ({ onLogin }: LoginStepProps) => {
                   type="text"
                   value={englishName}
                   onChange={(e) => setEnglishName(e.target.value)}
-                  placeholder="예: Haemin Kang"
+                  placeholder=""
                   autoFocus
                   className="w-full bg-transparent px-4 py-3.5 text-foreground placeholder:text-muted-foreground focus:outline-none text-ui text-center text-lg"
                 />

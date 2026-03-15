@@ -9,6 +9,7 @@ import DocumentStep from "@/components/sourcing/DocumentStep";
 import ResultsStep from "@/components/sourcing/ResultsStep";
 import AgentTerminal from "@/components/sourcing/AgentTerminal";
 import MyRequests, { SourcingRequest } from "@/pages/MyRequests";
+import AllRequests from "@/pages/AllRequests";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
 
@@ -46,17 +47,36 @@ async function apiSaveRequest(userName: string, req: SourcingRequest) {
     await fetch(`${API_BASE}/users/${encodeURIComponent(userName)}/requests`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ request: req }),
+      body: JSON.stringify({
+        request: {
+          id: req.id,
+          ingredient_name: req.ingredientName,
+          purpose: req.purpose,
+          requirements: req.requirements,
+          status: req.status,
+          task_id: req.taskId ?? null,
+          total_found: req.totalFound ?? 0,
+          sent: req.sent ?? 0,
+          replied: req.replied ?? 0,
+          created_at: req.createdAt,
+        },
+      }),
     });
   } catch { /* ignore */ }
 }
 
 async function apiUpdateRequest(userName: string, requestId: string, updates: Partial<SourcingRequest>) {
+  const body: Record<string, unknown> = {};
+  if (updates.status !== undefined) body.status = updates.status;
+  if (updates.taskId !== undefined) body.task_id = updates.taskId;
+  if (updates.totalFound !== undefined) body.total_found = updates.totalFound;
+  if (updates.sent !== undefined) body.sent = updates.sent;
+  if (updates.replied !== undefined) body.replied = updates.replied;
   try {
     await fetch(`${API_BASE}/users/${encodeURIComponent(userName)}/requests/${requestId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updates),
+      body: JSON.stringify(body),
     });
   } catch { /* ignore */ }
 }
@@ -74,7 +94,7 @@ async function apiLoadRequests(userName: string): Promise<SourcingRequest[]> {
 // ─── Component ───────────────────────────────────────────────
 const Index = () => {
   const [user, setUser] = useState<{ koreanName: string; englishName: string } | null>(null);
-  const [view, setView] = useState<"login" | "requests" | "sourcing">("login");
+  const [view, setView] = useState<"login" | "requests" | "sourcing" | "all-requests">("login");
 
   const [step, setStep] = useState<Step>("search");
   const [apiName, setApiName] = useState("");
@@ -88,6 +108,72 @@ const Index = () => {
   const [currentRequestId, setCurrentRequestId] = useState<string>("");
   const [currentTaskId, setCurrentTaskId] = useState<string>("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const userRef = useRef(user);
+  useEffect(() => { userRef.current = user; }, [user]);
+
+  // ─── polling helper (survives view changes) ───────────────────
+  const startPolling = (taskId: string, reqId: string) => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      try {
+        const statusRes = await fetch(`${API_BASE}/sourcing/${taskId}`);
+        const statusData = await statusRes.json();
+        // real progress from backend (0,10,70,100) – fake animation fills the gaps
+        if (statusData.progress) setSourcingProgress(statusData.progress);
+
+        if (statusData.status === "completed") {
+          clearInterval(pollRef.current!);
+          pollRef.current = null;
+          const mfrs: Manufacturer[] = (statusData.deduplicated || []).map((m: any) => ({
+            id: m.id || m.canonical_name || Math.random().toString(),
+            name: m.name, country: m.country, city: m.city,
+            contact_email: m.contact_email, website: m.website,
+            web_form_url: m.web_form_url,
+            certifications: m.certifications || [],
+            source_llms: m.source_llms || [],
+            confidence_score: m.confidence_score || 0.8,
+            is_excluded: false,
+          }));
+          setManufacturers(mfrs);
+          if (userRef.current) {
+            await apiUpdateRequest(userRef.current.koreanName, reqId, {
+              status: "reviewing", totalFound: statusData.total_deduplicated,
+            });
+          }
+          setStep("results");
+          setView("sourcing"); // bring user to results regardless of current view
+        } else if (statusData.status === "failed") {
+          clearInterval(pollRef.current!);
+          pollRef.current = null;
+          if (statusData.error === "cancelled") {
+            setStep("search");
+            setView("requests");
+          } else {
+            setSourcingError(statusData.error ? `오류: ${statusData.error}` : "검색 중 오류가 발생했습니다.");
+            setView("sourcing");
+          }
+        }
+      } catch {
+        clearInterval(pollRef.current!);
+        pollRef.current = null;
+        setSourcingError("서버 연결 오류");
+        setView("sourcing");
+      }
+    }, 2000);
+  };
+
+  // ─── fake progress animation while searching ─────────────────
+  // slowly creeps toward 65% so the bar moves even before backend reports 70%
+  useEffect(() => {
+    if (step !== "searching") return;
+    const timer = setInterval(() => {
+      setSourcingProgress(prev => {
+        if (prev >= 65) return prev;
+        return Math.min(prev + 0.6, 65);
+      });
+    }, 800);
+    return () => clearInterval(timer);
+  }, [step]);
 
   // Load user from localStorage
   useEffect(() => {
@@ -119,9 +205,19 @@ const Index = () => {
     setRequirements(req.requirements);
     setCurrentRequestId(req.id);
     setCurrentTaskId(req.taskId || "");
-    if (req.status === "reviewing") setStep("results");
-    else if (req.status === "monitoring" || req.status === "outreach") setStep("sourcing");
-    else setStep("searching");
+    if (req.status === "reviewing") {
+      setStep("results");
+    } else if (req.status === "monitoring" || req.status === "outreach") {
+      setStep("sourcing");
+    } else if (req.status === "searching" && req.taskId) {
+      // resume polling for in-progress task
+      setSourcingProgress(0);
+      setSourcingError("");
+      setStep("searching");
+      startPolling(req.taskId, req.id);
+    } else {
+      setStep("searching");
+    }
     setView("sourcing");
   };
 
@@ -189,43 +285,7 @@ const Index = () => {
       setCurrentTaskId(taskId);
       if (user) await apiUpdateRequest(user.koreanName, reqId, { taskId });
 
-      pollRef.current = setInterval(async () => {
-        try {
-          const statusRes = await fetch(`${API_BASE}/sourcing/${taskId}`);
-          const statusData = await statusRes.json();
-          setSourcingProgress(statusData.progress || 0);
-
-          if (statusData.status === "completed") {
-            clearInterval(pollRef.current!);
-            const mfrs: Manufacturer[] = (statusData.deduplicated || []).map((m: any) => ({
-              id: m.id || m.canonical_name || Math.random().toString(),
-              name: m.name, country: m.country, city: m.city,
-              contact_email: m.contact_email, website: m.website,
-              web_form_url: m.web_form_url,
-              certifications: m.certifications || [],
-              source_llms: m.source_llms || [],
-              confidence_score: m.confidence_score || 0.8,
-              is_excluded: false,
-            }));
-            setManufacturers(mfrs);
-            if (user) await apiUpdateRequest(user.koreanName, reqId, {
-              status: "reviewing", totalFound: statusData.total_deduplicated
-            });
-            setStep("results");
-          } else if (statusData.status === "failed") {
-            clearInterval(pollRef.current!);
-            if (statusData.error === "cancelled") {
-              setStep("search");
-              setView("requests");
-            } else {
-              setSourcingError("검색 중 오류가 발생했습니다.");
-            }
-          }
-        } catch {
-          clearInterval(pollRef.current!);
-          setSourcingError("서버 연결 오류");
-        }
-      }, 2000);
+      startPolling(taskId, reqId);
     } catch {
       setSourcingError("검색 시작 실패. 백엔드 서버를 확인해주세요.");
     }
@@ -258,12 +318,16 @@ const Index = () => {
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
   if (view === "login") return <LoginStep onLogin={handleLogin} />;
+  if (view === "all-requests" && user) {
+    return <AllRequests onBack={() => setView("requests")} apiBase={API_BASE} />;
+  }
   if (view === "requests" && user) {
     return (
       <MyRequests
         user={user}
         onNewRequest={handleNewRequest}
         onViewRequest={handleViewRequest}
+        onViewAll={() => setView("all-requests")}
         apiBase={API_BASE}
       />
     );
@@ -320,12 +384,12 @@ const Index = () => {
       <main className={`px-6 py-8 ${step === "sourcing" ? "pb-60" : ""}`}>
         <AnimatePresence mode="wait">
           {step === "search" && <SearchStep key="search" onSearch={handleSearch} />}
-          {step === "purpose" && <PurposeStep key="purpose" apiName={apiName} onSelect={handlePurpose} />}
+          {step === "purpose" && <PurposeStep key="purpose" apiName={apiName} onSelect={handlePurpose} onBack={() => setStep("search")} />}
           {step === "requirements" && (
-            <RequirementsStep key="requirements" purpose={purpose} onSubmit={handleRequirements} />
+            <RequirementsStep key="requirements" purpose={purpose} onSubmit={handleRequirements} onBack={() => setStep("purpose")} />
           )}
-          {step === "region" && <RegionStep key="region" onSubmit={handleRegion} />}
-          {step === "documents" && <DocumentStep key="documents" onSubmit={handleDocuments} />}
+          {step === "region" && <RegionStep key="region" onSubmit={handleRegion} onBack={() => setStep("requirements")} />}
+          {step === "documents" && <DocumentStep key="documents" onSubmit={handleDocuments} onBack={() => setStep("region")} />}
 
           {step === "searching" && (
             <motion.div
@@ -352,7 +416,7 @@ const Index = () => {
                   <div className="text-center space-y-3">
                     <div className="text-data text-primary font-mono tracking-widest">AI SOURCING</div>
                     <h2 className="text-xl font-semibold text-foreground">
-                      <span className="text-primary">{apiName}</span> 제조소 탐색 중
+                      <span className="text-foreground">{apiName}</span> 제조소 탐색 중
                     </h2>
                     <p className="text-muted-foreground text-ui">
                       Gemini와 Qwen이 전 세계 제조소를 병렬로 검색하고 있습니다...
