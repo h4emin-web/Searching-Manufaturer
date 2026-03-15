@@ -14,37 +14,35 @@ logger = structlog.get_logger()
 settings = get_settings()
 
 
-async def _send_via_resend(
+async def _send_via_brevo(
     to_email: str,
     from_email: str,
     subject: str,
     body: str,
-    message_id: str,
     reply_to: str | None = None,
 ) -> tuple[bool, str | None]:
-    """Resend API로 이메일 발송 (httpx HTTPS, Railway 호환)"""
+    """Brevo API로 이메일 발송 (HTTPS, Railway 호환)"""
     import httpx
     headers = {
-        "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+        "api-key": settings.BREVO_API_KEY,
         "Content-Type": "application/json",
     }
     payload: dict = {
-        "from": from_email,
-        "to": [to_email],
+        "sender": {"email": from_email},
+        "to": [{"email": to_email}],
         "subject": subject,
-        "text": body,
-        "headers": {"Message-ID": message_id},
+        "textContent": body,
     }
     if reply_to:
-        payload["reply_to"] = [reply_to]
+        payload["replyTo"] = {"email": reply_to}
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post("https://api.resend.com/emails", headers=headers, json=payload)
+            resp = await client.post("https://api.brevo.com/v3/smtp/email", headers=headers, json=payload)
         if resp.is_success:
-            logger.info("resend_api_success", to=to_email, id=resp.json().get("id"))
+            logger.info("brevo_api_success", to=to_email, id=resp.json().get("messageId"))
             return True, None
-        return False, f"Resend {resp.status_code}: {resp.text[:300]}"
+        return False, f"Brevo {resp.status_code}: {resp.text[:300]}"
     except Exception as exc:
         return False, str(exc)
 
@@ -118,8 +116,11 @@ async def send_outreach_email(
         subject = f"[TEST→{to_email}] {subject}"
         logger.info("email_test_override", original_to=to_email, override_to=actual_to)
 
-    # Resend 우선 (Railway 호환)
-    if settings.RESEND_API_KEY:
+    # Brevo 우선, Resend fallback, SMTP 최후
+    if settings.BREVO_API_KEY:
+        success, error = await _send_via_brevo(actual_to, from_email, subject, full_body, reply_to)
+        method = "brevo"
+    elif settings.RESEND_API_KEY:
         success, error = await _send_via_resend(actual_to, from_email, subject, full_body, final_message_id, reply_to)
         method = "resend"
     elif settings.SMTP_USER and settings.SMTP_PASSWORD:
