@@ -104,8 +104,8 @@ async def _query_gemini_native(
     if not api_key:
         raise ValueError("GEMINI_API_KEY not configured")
 
-    model = "gemini-1.5-flash"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    model = "gemini-1.5-flash-latest"
+    url = f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent"
     payload = {
         "contents": [
             {"role": "user", "parts": [{"text": f"{system_prompt}\n\n{user_prompt}"}]}

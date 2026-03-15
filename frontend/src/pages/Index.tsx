@@ -6,6 +6,7 @@ import PurposeStep from "@/components/sourcing/PurposeStep";
 import RequirementsStep from "@/components/sourcing/RequirementsStep";
 import RegionStep from "@/components/sourcing/RegionStep";
 import DocumentStep from "@/components/sourcing/DocumentStep";
+import SurveyStep, { SurveyData } from "@/components/sourcing/SurveyStep";
 import ResultsStep from "@/components/sourcing/ResultsStep";
 import AgentTerminal from "@/components/sourcing/AgentTerminal";
 import MyRequests, { SourcingRequest } from "@/pages/MyRequests";
@@ -13,7 +14,7 @@ import AllRequests from "@/pages/AllRequests";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
 
-type Step = "search" | "purpose" | "requirements" | "region" | "documents" | "searching" | "results" | "sourcing";
+type Step = "search" | "purpose" | "survey" | "requirements" | "region" | "documents" | "searching" | "results" | "sourcing";
 
 export interface Manufacturer {
   id: string;
@@ -92,6 +93,7 @@ const Index = () => {
   const [purpose, setPurpose] = useState("");
   const [requirements, setRequirements] = useState<string[]>([]);
   const [regions, setRegions] = useState<string[]>([]);
+  const [surveyData, setSurveyData] = useState<SurveyData | null>(null);
   const [sessionId, setSessionId] = useState<string>("");
   const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
   const [sourcingProgress, setSourcingProgress] = useState(0);
@@ -232,7 +234,8 @@ const Index = () => {
   }, [view]);
 
   const handleSearch = (query: string) => { setApiName(query); setStep("purpose"); };
-  const handlePurpose = (p: string) => { setPurpose(p); setStep("requirements"); };
+  const handlePurpose = (p: string) => { setPurpose(p); setStep("survey"); };
+  const handleSurvey = (data: SurveyData) => { setSurveyData(data); setStep("requirements"); };
 
   const handleRequirements = (reqs: Record<string, boolean> | string[]) => {
     const selected = Array.isArray(reqs)
@@ -273,7 +276,13 @@ const Index = () => {
           use_case: purpose === "pharma" ? "pharmaceutical" : purpose,
           regulatory_requirements: requirements,
           regions,
-          sourcing_notes: "",
+          sourcing_notes: surveyData ? [
+            `[고객사 현황] ${surveyData.clientSituation === "기타" ? surveyData.clientSituationOther || "기타" : surveyData.clientSituation}`,
+            `[원료 사용 용도] ${surveyData.ingredientUse}`,
+            `[End User 공개] ${surveyData.endUserDisclosure}${surveyData.endUserDisclosure === "불가능" && surveyData.disclosureTo ? ` — ${surveyData.disclosureTo}로 공개` : ""}`,
+            surveyData.confidentialInfo ? `[기밀 정보] ${surveyData.confidentialInfo}` : "",
+            surveyData.specialNotes ? `[특이사항] ${surveyData.specialNotes}` : "",
+          ].filter(Boolean).join("\n") : "",
           requester_name: user?.englishName || "",
         }),
       });
@@ -344,8 +353,9 @@ const Index = () => {
   }
 
   const progressWidth =
-    step === "purpose" ? "20%" : step === "requirements" ? "40%" :
-    step === "region" ? "60%" : step === "documents" ? "80%" :
+    step === "purpose" ? "16%" : step === "survey" ? "33%" :
+    step === "requirements" ? "50%" : step === "region" ? "66%" :
+    step === "documents" ? "83%" :
     (step === "searching" || step === "results" || step === "sourcing") ? "100%" : "0%";
 
   return (
@@ -374,10 +384,11 @@ const Index = () => {
           <span className="text-data text-muted-foreground font-mono">
             {user?.koreanName} —{" "}
             {step === "search" && "원료 입력"}
-            {step === "purpose" && "Step 1/5"}
-            {step === "requirements" && "Step 2/5"}
-            {step === "region" && "Step 3/5"}
-            {step === "documents" && "Step 4/5"}
+            {step === "purpose" && "Step 1/6"}
+            {step === "survey" && "Step 2/6"}
+            {step === "requirements" && "Step 3/6"}
+            {step === "region" && "Step 4/6"}
+            {step === "documents" && "Step 5/6"}
             {step === "searching" && "AI 검색 중..."}
             {step === "results" && "Step 5/5"}
             {step === "sourcing" && "소싱 진행 중"}
@@ -385,7 +396,7 @@ const Index = () => {
         </div>
       </header>
 
-      {step !== "search" && (
+      {step !== "search" && step !== "survey" && (
         <div className="h-[2px] bg-secondary">
           <div className="h-full bg-primary transition-all duration-500" style={{ width: progressWidth }} />
         </div>
@@ -395,8 +406,9 @@ const Index = () => {
         <AnimatePresence mode="wait">
           {step === "search" && <SearchStep key="search" onSearch={handleSearch} />}
           {step === "purpose" && <PurposeStep key="purpose" apiName={apiName} onSelect={handlePurpose} onBack={() => setStep("search")} />}
+          {step === "survey" && <SurveyStep key="survey" onSubmit={handleSurvey} onBack={() => setStep("purpose")} />}
           {step === "requirements" && (
-            <RequirementsStep key="requirements" purpose={purpose} onSubmit={handleRequirements} onBack={() => setStep("purpose")} />
+            <RequirementsStep key="requirements" purpose={purpose} onSubmit={handleRequirements} onBack={() => setStep("survey")} />
           )}
           {step === "region" && <RegionStep key="region" onSubmit={handleRegion} onBack={() => setStep("requirements")} />}
           {step === "documents" && <DocumentStep key="documents" onSubmit={handleDocuments} onBack={() => setStep("region")} />}
