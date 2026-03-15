@@ -123,30 +123,27 @@ async def _query_gemini_native(
         },
     }
 
-    last_error: Exception | None = None
+    errors: list[str] = []
     async with httpx.AsyncClient(timeout=timeout) as client:
         for api_ver, model in endpoints_to_try:
             url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{model}:generateContent"
             try:
                 resp = await client.post(url, params={"key": api_key}, json=payload)
-                if resp.status_code == 404:
-                    logger.warning("gemini_model_not_found", api_ver=api_ver, model=model)
-                    continue
+                log_msg = f"{api_ver}/{model} → {resp.status_code}"
                 if not resp.is_success:
-                    logger.error("gemini_api_error", api_ver=api_ver, model=model, status=resp.status_code, body=resp.text[:300])
-                    resp.raise_for_status()
+                    body_preview = resp.text[:300]
+                    logger.warning("gemini_attempt_failed", msg=log_msg, body=body_preview)
+                    errors.append(f"{log_msg}: {body_preview}")
+                    continue
                 content = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
                 result = _extract_manufacturers(content)
                 logger.info("gemini_success", api_ver=api_ver, model=model, count=len(result))
                 return result
-            except httpx.HTTPStatusError as e:
-                last_error = e
-                continue
             except Exception as e:
-                last_error = e
+                errors.append(f"{api_ver}/{model}: {e}")
                 continue
 
-    raise last_error or RuntimeError("All Gemini endpoints failed")
+    raise RuntimeError("All Gemini endpoints failed:\n" + "\n".join(errors))
 
 
 # ─── Ollama 직접 호출 ──────────────────────────────────────────
