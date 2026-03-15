@@ -107,9 +107,8 @@ async def _query_gemini_native(
     model = "gemini-1.5-flash-latest"
     url = f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent"
     payload = {
-        "system_instruction": {"parts": [{"text": system_prompt}]},
         "contents": [
-            {"role": "user", "parts": [{"text": user_prompt}]}
+            {"role": "user", "parts": [{"text": f"{system_prompt}\n\n{user_prompt}\n\nReturn ONLY valid JSON, no markdown."}]}
         ],
         "generationConfig": {
             "temperature": 0.2,
