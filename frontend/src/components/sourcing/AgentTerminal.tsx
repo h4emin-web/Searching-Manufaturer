@@ -2,13 +2,13 @@ import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { Manufacturer } from "@/pages/Index";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
-
 interface AgentTerminalProps {
   apiName: string;
   isActive: boolean;
   sessionId: string;
   manufacturers: Manufacturer[];
+  outreachPlanId?: string;
+  apiBase?: string;
 }
 
 interface LogEntry {
@@ -17,16 +17,16 @@ interface LogEntry {
   type: "info" | "action" | "success" | "warning";
 }
 
-const now = () => new Date().toLocaleTimeString("ko-KR", { hour12: false });
+const API_BASE_DEFAULT = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
 
-const AgentTerminal = ({ apiName, isActive, sessionId, manufacturers }: AgentTerminalProps) => {
+const AgentTerminal = ({ apiName, isActive, manufacturers, outreachPlanId, apiBase }: AgentTerminalProps) => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [tasksDone, setTasksDone] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const esRef = useRef<EventSource | null>(null);
   const startTimeRef = useRef(Date.now());
-  const sseConnectedRef = useRef(false);
-  const sseErrorCountRef = useRef(0);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const seenRef = useRef<Set<string>>(new Set());
+  const base = apiBase || API_BASE_DEFAULT;
 
   const addLog = (type: LogEntry["type"], message: string) => {
     const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
@@ -37,70 +37,65 @@ const AgentTerminal = ({ apiName, isActive, sessionId, manufacturers }: AgentTer
 
   useEffect(() => {
     if (!isActive) return;
-
-    // Initial logs
     addLog("info", `소싱 프로토콜 초기화 — ${apiName}`);
-    addLog("action", `${manufacturers.length}개 제조소에 COA 및 샘플 요청 메일 발송 시작`);
+    addLog("action", `${manufacturers.length}개 제조소 이메일 확인 및 발송 시작`);
+  }, [isActive]);
 
-    // Log each manufacturer
-    manufacturers.forEach((m, i) => {
-      setTimeout(() => {
-        addLog("action", `${m.name} (${m.country})에 문의 메일 발송 중...`);
-        setTimeout(() => {
-          if (m.contact_email) {
-            addLog("success", `${m.name} — 이메일 발송 완료 (${m.contact_email})`);
-          } else {
-            addLog("action", `${m.name} — 웹 문의 폼으로 전송 중...`);
-            addLog("success", `${m.name} — 웹 폼 전송 완료`);
+  // 실제 outreach 플랜 폴링
+  useEffect(() => {
+    if (!outreachPlanId || !isActive) return;
+
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`${base}/outreach/simple-plans/${outreachPlanId}`);
+        if (!res.ok) return;
+        const plan = await res.json();
+        let done = 0;
+
+        for (const item of plan.items) {
+          const key = `${item.id}-${item.status}`;
+          if (seenRef.current.has(key)) {
+            if (item.status !== "pending" && item.status !== "crawling" && item.status !== "sending") done++;
+            continue;
           }
-          setTasksDone(prev => prev + 1);
-        }, 600);
-      }, i * 1400);
-    });
 
-    // Connect to SSE stream for real-time events
-    const connectSSE = () => {
-      esRef.current?.close();
-      const es = new EventSource(`${API_BASE}/dashboard/${sessionId}/stream`);
-      esRef.current = es;
-
-      es.onopen = () => {
-        sseErrorCountRef.current = 0;
-        if (!sseConnectedRef.current) {
-          sseConnectedRef.current = true;
-          addLog("info", "실시간 모니터링 연결 완료");
-        }
-      };
-
-      es.onmessage = (e) => {
-        try {
-          const event = JSON.parse(e.data);
-          if (event.type === "outreach_replied") {
-            addLog("success", `${event.manufacturer || "제조소"} 응답 수신! ${event.message || ""}`);
-            setTasksDone(prev => prev + 1);
-          } else if (event.type === "outreach_sent") {
-            addLog("action", `${event.manufacturer || "제조소"} — 발송 완료`);
-          } else if (event.type === "outreach_failed") {
-            addLog("warning", `${event.manufacturer || "제조소"} — 발송 실패`);
+          if (item.status === "crawling") {
+            if (!seenRef.current.has(`${item.id}-crawling`)) {
+              seenRef.current.add(`${item.id}-crawling`);
+              addLog("action", `${item.name} — 이메일 주소 크롤링 중...`);
+            }
+          } else if (item.status === "sending") {
+            if (!seenRef.current.has(`${item.id}-sending`)) {
+              seenRef.current.add(`${item.id}-sending`);
+              addLog("action", `${item.name} — 이메일 발송 중... (${item.email})`);
+            }
+          } else if (item.status === "sent") {
+            seenRef.current.add(key);
+            addLog("success", `${item.name} — 이메일 발송 완료 (${item.email})`);
+            done++;
+          } else if (item.status === "webform") {
+            seenRef.current.add(key);
+            addLog("warning", `${item.name} — 이메일 없음, 홈페이지 문의 필요: ${item.web_form_url || item.website || ""}`);
+            done++;
+          } else if (item.status === "failed") {
+            seenRef.current.add(key);
+            addLog("warning", `${item.name} — 발송 실패: ${item.error || ""}`);
+            done++;
           }
-        } catch { /* ignore parse errors */ }
-      };
-
-      es.onerror = () => {
-        sseErrorCountRef.current += 1;
-        // 3번 연속 실패 시에만 로그 출력, EventSource가 자동 재연결함
-        if (sseErrorCountRef.current === 3) {
-          addLog("warning", "모니터링 연결 불안정 — 자동 재연결 중");
         }
-      };
-    };
 
-    setTimeout(connectSSE, manufacturers.length * 1400 + 1000);
+        setTasksDone(done);
 
-    return () => {
-      esRef.current?.close();
-    };
-  }, [isActive, sessionId]);
+        if (plan.status === "completed") {
+          clearInterval(pollRef.current!);
+          pollRef.current = null;
+          addLog("info", `아웃리치 완료 — ${done}/${plan.items.length}건 처리됨`);
+        }
+      } catch { /* ignore */ }
+    }, 2000);
+
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [outreachPlanId, isActive]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -119,7 +114,6 @@ const AgentTerminal = ({ apiName, isActive, sessionId, manufacturers }: AgentTer
       animate={{ y: 0 }}
       transition={{ duration: 0.5, ease: [0.2, 0.8, 0.2, 1] }}
       className="fixed bottom-0 left-0 right-0 glass-surface border-t border-border z-50"
-      style={{ borderTopColor: "hsl(160, 100%, 45%, 0.2)" }}
     >
       <div className="flex items-center justify-between px-4 py-2 border-b border-border">
         <div className="flex items-center gap-3">
@@ -155,7 +149,6 @@ const AgentTerminal = ({ apiName, isActive, sessionId, manufacturers }: AgentTer
         )}
       </div>
 
-      {/* Scanning line */}
       <div className="h-[2px] overflow-hidden">
         <div className="scanning-line h-full w-full" />
       </div>

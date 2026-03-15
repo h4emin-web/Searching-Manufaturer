@@ -1,14 +1,167 @@
+import asyncio
+import uuid
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
+from typing import Optional
+import httpx
+import structlog
 
 from ..models.schemas import OutreachPlan, OutreachAttempt, Manufacturer
 from ..services.priority_queue import build_outreach_plan, execute_outreach_queue
-from ..services.contact_extractor import batch_crawl_contacts
+from ..services.contact_extractor import batch_crawl_contacts, _parse_contacts_from_html
 from ..services.email_sender import send_outreach_email
+from ..agents.outreach_email_agent import generate_initial_email
 
+logger = structlog.get_logger()
 router = APIRouter()
 _plans: dict[str, OutreachPlan] = {}
 _plan_manufacturers: dict[str, dict[str, Manufacturer]] = {}
+
+# 새 심플 아웃리치 플랜 저장소
+_simple_plans: dict[str, dict] = {}  # plan_id → {status, items: [...]}
+
+
+class SimpleManufacturer(BaseModel):
+    id: str
+    name: str
+    country: str
+    contact_email: Optional[str] = None
+    website: Optional[str] = None
+
+
+class SimpleOutreachRequest(BaseModel):
+    manufacturers: list[SimpleManufacturer]
+    ingredient: str
+    use_case: str = "pharmaceutical"
+    requirements: list[str] = []
+    sourcing_notes: str = ""
+    requester_name: str = ""
+
+
+@router.post("/simple-start")
+async def simple_start_outreach(req: SimpleOutreachRequest, background_tasks: BackgroundTasks):
+    """제조소 목록으로 이메일 크롤링 + 발송 시작"""
+    plan_id = str(uuid.uuid4())
+    items = [
+        {
+            "id": m.id,
+            "name": m.name,
+            "country": m.country,
+            "email": m.contact_email,
+            "website": m.website,
+            "status": "pending",  # pending/crawling/sending/sent/webform/failed
+            "contact_method": None,
+            "error": None,
+        }
+        for m in req.manufacturers
+    ]
+    _simple_plans[plan_id] = {"status": "running", "items": items}
+    background_tasks.add_task(_run_simple_outreach, plan_id, req)
+    return {"plan_id": plan_id, "total": len(items)}
+
+
+@router.get("/simple-plans/{plan_id}")
+async def get_simple_plan(plan_id: str):
+    plan = _simple_plans.get(plan_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    return plan
+
+
+async def _crawl_email_httpx(website: str) -> tuple[str | None, str | None]:
+    """httpx로 웹사이트에서 이메일 + 웹폼 URL 추출 (Playwright 없이)"""
+    if not website or not website.startswith("http"):
+        return None, None
+    try:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            headers = {"User-Agent": "Mozilla/5.0 (compatible; PharmaBot/1.0)"}
+            resp = await client.get(website, headers=headers)
+            if not resp.is_success:
+                return None, None
+            found = _parse_contacts_from_html(resp.text, website)
+            email = found["emails"][0] if found["emails"] else None
+            web_form = found["contact_page_urls"][0] if found["contact_page_urls"] else website
+            # contact 페이지가 있으면 추가 크롤링
+            if found["contact_page_urls"] and not email:
+                try:
+                    c_resp = await client.get(found["contact_page_urls"][0], headers=headers)
+                    if c_resp.is_success:
+                        c_found = _parse_contacts_from_html(c_resp.text, found["contact_page_urls"][0])
+                        if c_found["emails"]:
+                            email = c_found["emails"][0]
+                except Exception:
+                    pass
+            return email, web_form
+    except Exception as e:
+        logger.warning("httpx_crawl_failed", url=website, error=str(e))
+        return None, None
+
+
+async def _process_one_manufacturer(plan_id: str, idx: int, item: dict, req: SimpleOutreachRequest):
+    """단일 제조소 처리: 이메일 찾기 → 발송 or 웹폼"""
+    items = _simple_plans[plan_id]["items"]
+
+    # 1. 이메일 크롤링 (이미 없는 경우)
+    email = item["email"]
+    web_form = None
+    if not email and item["website"]:
+        items[idx]["status"] = "crawling"
+        email, web_form = await _crawl_email_httpx(item["website"])
+        if email:
+            items[idx]["email"] = email
+
+    # 2. 이메일 발송 or 웹폼 안내
+    if email:
+        items[idx]["status"] = "sending"
+        subject, body = await generate_initial_email(
+            manufacturer_name=item["name"],
+            manufacturer_country=item["country"],
+            ingredient=req.ingredient,
+            use_case=req.use_case,
+            requirements=req.requirements,
+            sourcing_notes=req.sourcing_notes,
+            requester_name=req.requester_name,
+        )
+        success, error = await send_outreach_email(
+            to_email=email,
+            manufacturer_name=item["name"],
+            subject=subject,
+            body_en=body,
+            ingredient=req.ingredient,
+            country=item["country"],
+        )
+        if success:
+            items[idx]["status"] = "sent"
+            items[idx]["contact_method"] = "email"
+            logger.info("outreach_sent", manufacturer=item["name"], email=email)
+        else:
+            items[idx]["status"] = "failed"
+            items[idx]["error"] = error
+    else:
+        # 이메일 없음 → 웹폼 안내
+        items[idx]["status"] = "webform"
+        items[idx]["contact_method"] = "webform"
+        items[idx]["web_form_url"] = web_form or item["website"]
+        logger.info("outreach_webform", manufacturer=item["name"], url=web_form)
+
+
+async def _run_simple_outreach(plan_id: str, req: SimpleOutreachRequest):
+    """백그라운드: 동시 5개씩 처리"""
+    plan = _simple_plans[plan_id]
+    items = plan["items"]
+    semaphore = asyncio.Semaphore(5)
+
+    async def _with_limit(idx: int, item: dict):
+        async with semaphore:
+            try:
+                await _process_one_manufacturer(plan_id, idx, item, req)
+            except Exception as e:
+                items[idx]["status"] = "failed"
+                items[idx]["error"] = str(e)
+
+    await asyncio.gather(*[_with_limit(i, item) for i, item in enumerate(items)])
+    plan["status"] = "completed"
+    logger.info("simple_outreach_complete", plan_id=plan_id, total=len(items))
 
 
 class CreatePlanRequest(BaseModel):

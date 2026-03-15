@@ -100,6 +100,7 @@ const Index = () => {
   const [sourcingError, setSourcingError] = useState("");
   const [currentRequestId, setCurrentRequestId] = useState<string>("");
   const [currentTaskId, setCurrentTaskId] = useState<string>("");
+  const [currentOutreachPlanId, setCurrentOutreachPlanId] = useState<string>("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const userRef = useRef(user);
   useEffect(() => { userRef.current = user; }, [user]);
@@ -322,12 +323,49 @@ const Index = () => {
   };
 
   const handleStartSourcing = async (selected: string[], excluded: string[]) => {
-    setManufacturers(prev => prev.map(m => ({ ...m, is_excluded: excluded.includes(m.id) })));
+    const updated = manufacturers.map(m => ({ ...m, is_excluded: excluded.includes(m.id) }));
+    setManufacturers(updated);
+    const selectedMfrs = updated.filter(m => selected.includes(m.id));
+
     if (user && currentRequestId) {
       await apiUpdateRequest(user.koreanName, currentRequestId, {
-        status: "monitoring", sent: selected.length, replied: 0,
+        status: "outreach", sent: selectedMfrs.length, replied: 0,
       });
     }
+
+    // 실제 아웃리치 시작
+    try {
+      const res = await fetch(`${API_BASE}/outreach/simple-start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          manufacturers: selectedMfrs.map(m => ({
+            id: m.id,
+            name: m.name,
+            country: m.country,
+            contact_email: m.contact_email || null,
+            website: m.website || null,
+          })),
+          ingredient: apiName,
+          use_case: purpose === "pharma" ? "pharmaceutical" : purpose,
+          requirements,
+          sourcing_notes: surveyData ? [
+            surveyData.clientName ? `[고객사명] ${surveyData.clientName}` : "",
+            `[고객사 현황] ${surveyData.clientSituation}`,
+            `[원료 사용 용도] ${surveyData.ingredientUse}`,
+            `[End User 공개] ${surveyData.endUserDisclosure}`,
+            surveyData.confidentialInfo ? `[기밀 정보] ${surveyData.confidentialInfo}` : "",
+            surveyData.specialNotes ? `[특이사항] ${surveyData.specialNotes}` : "",
+          ].filter(Boolean).join("\n") : "",
+          requester_name: user?.englishName || user?.koreanName || "",
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentOutreachPlanId(data.plan_id);
+      }
+    } catch { /* ignore */ }
+
     setStep("sourcing");
   };
 
@@ -502,6 +540,8 @@ const Index = () => {
           isActive={true}
           sessionId={sessionId}
           manufacturers={manufacturers.filter(m => !m.is_excluded)}
+          outreachPlanId={currentOutreachPlanId}
+          apiBase={API_BASE}
         />
       )}
     </div>
