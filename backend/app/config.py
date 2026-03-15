@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
     FROM_EMAIL: str = ""
+    REPLY_TO_EMAIL: str = ""          # 답장 수신 이메일 (본인 Gmail 등)
 
     # Deduplication
     DEDUP_SIMILARITY_THRESHOLD: float = 0.82

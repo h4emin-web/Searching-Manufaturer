@@ -21,19 +21,23 @@ async def _send_via_resend(
     subject: str,
     body: str,
     message_id: str,
+    reply_to: str | None = None,
 ) -> tuple[bool, str | None]:
     """Resend API로 이메일 발송 (HTTPS, Railway 호환)"""
     import resend
     resend.api_key = settings.RESEND_API_KEY
 
     def _send():
-        return resend.Emails.send({
+        payload: dict = {
             "from": from_email,
             "to": [to_email],
             "subject": subject,
             "text": body,
             "headers": {"Message-ID": message_id},
-        })
+        }
+        if reply_to:
+            payload["reply_to"] = [reply_to]
+        return resend.Emails.send(payload)
 
     try:
         result = await asyncio.get_event_loop().run_in_executor(None, _send)
@@ -105,9 +109,11 @@ async def send_outreach_email(
     parts = [p for p in [body_en, body_ko and f"\n---\n[Korean / 한국어]\n{body_ko}", body_zh and f"\n---\n[Chinese / 中文]\n{body_zh}"] if p]
     full_body = "\n".join(parts)
 
+    reply_to = settings.REPLY_TO_EMAIL or None
+
     # Resend 우선 (Railway 호환)
     if settings.RESEND_API_KEY:
-        success, error = await _send_via_resend(to_email, from_email, subject, full_body, final_message_id)
+        success, error = await _send_via_resend(to_email, from_email, subject, full_body, final_message_id, reply_to)
         method = "resend"
     elif settings.SMTP_USER and settings.SMTP_PASSWORD:
         success, error = await _send_via_smtp(to_email, from_email, subject, full_body, final_message_id, in_reply_to)
