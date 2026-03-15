@@ -101,6 +101,7 @@ const Index = () => {
   const [currentRequestId, setCurrentRequestId] = useState<string>("");
   const [currentTaskId, setCurrentTaskId] = useState<string>("");
   const [currentOutreachPlanId, setCurrentOutreachPlanId] = useState<string>("");
+  const [outreachManufacturers, setOutreachManufacturers] = useState<Manufacturer[]>([]);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const userRef = useRef(user);
   useEffect(() => { userRef.current = user; }, [user]);
@@ -322,10 +323,12 @@ const Index = () => {
     setView("requests");
   };
 
-  const handleStartSourcing = async (selected: string[], excluded: string[]) => {
-    const updated = manufacturers.map(m => ({ ...m, is_excluded: excluded.includes(m.id) }));
-    setManufacturers(updated);
-    const selectedMfrs = updated.filter(m => selected.includes(m.id));
+  const handleStartSourcing = async (selectedMfrs: Manufacturer[]) => {
+    // Mark excluded manufacturers in state
+    const selectedIds = new Set(selectedMfrs.map(m => m.id));
+    setManufacturers(prev => prev.map(m => ({ ...m, is_excluded: !selectedIds.has(m.id) })));
+    // Store selected manufacturers for AgentTerminal before any awaits
+    setOutreachManufacturers(selectedMfrs);
 
     if (user && currentRequestId) {
       await apiUpdateRequest(user.koreanName, currentRequestId, {
@@ -539,7 +542,7 @@ const Index = () => {
           apiName={apiName}
           isActive={true}
           sessionId={sessionId}
-          manufacturers={manufacturers.filter(m => !m.is_excluded)}
+          manufacturers={outreachManufacturers}
           outreachPlanId={currentOutreachPlanId}
           apiBase={API_BASE}
         />

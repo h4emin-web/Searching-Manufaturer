@@ -5,7 +5,7 @@ import { Manufacturer } from "@/pages/Index";
 interface ResultsStepProps {
   apiName: string;
   manufacturers: Manufacturer[];
-  onStartSourcing: (selected: string[], excluded: string[]) => void;
+  onStartSourcing: (selectedManufacturers: Manufacturer[]) => void;
   onSearchMore: () => void;
   getFlag: (country: string) => string;
 }
@@ -179,7 +179,7 @@ const ResultsStep = ({ apiName, manufacturers, onStartSourcing, onSearchMore, ge
         </button>
         <div className="flex-1" />
         <button
-          onClick={() => onStartSourcing(visible.map(m => m.id), excluded)}
+          onClick={() => onStartSourcing(visible)}
           disabled={visible.length === 0}
           className="bg-primary text-primary-foreground px-8 py-2.5 rounded-sm font-semibold text-ui hover:opacity-90 transition-opacity disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
         >
