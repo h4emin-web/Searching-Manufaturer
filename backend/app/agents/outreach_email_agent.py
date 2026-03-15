@@ -66,7 +66,7 @@ Write the email in {language}.
 Include:
 1. Brief introduction of who we are (Korean pharma company)
 2. Specific request for: product availability, certifications (COA, GMP certificate), pricing (CIF Busan port), and free sample
-3. Professional closing
+3. Professional closing — sign off with exactly "{requester_name}" as the name, no placeholders like [Your Name] or [Your Title]
 
 Return ONLY valid JSON:
 {{"subject": "...", "body": "..."}}
