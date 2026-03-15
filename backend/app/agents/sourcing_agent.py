@@ -105,12 +105,16 @@ async def _query_gemini_native(
         raise ValueError("GEMINI_API_KEY not configured")
 
     # AI Studio 기본 형식 — role 없이, v1beta 우선
+    # 최신 모델명 우선 시도 (2025 기준)
     models_to_try = [
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-latest",
-        "gemini-1.5-pro",
-        "gemini-pro",
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-2.0-flash-lite",
+        "gemini-2.0-flash-exp",
+        "gemini-1.5-flash-001",
+        "gemini-1.5-flash-002",
+        "gemini-1.5-pro-001",
+        "gemini-1.5-pro-002",
     ]
     full_prompt = f"{system_prompt}\n\n{user_prompt}\n\nReturn ONLY valid JSON, no markdown."
     # role 필드 없이 최소 형식 사용
