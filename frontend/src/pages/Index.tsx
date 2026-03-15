@@ -426,7 +426,7 @@ const Index = () => {
                   <div className="w-full max-w-md space-y-4">
                     <div className="flex justify-between text-data text-muted-foreground font-mono">
                       <span>검색 진행률</span>
-                      <span>{sourcingProgress}%</span>
+                      <span>{Math.round(sourcingProgress)}%</span>
                     </div>
                     <div className="h-[2px] bg-secondary rounded-full overflow-hidden">
                       <motion.div

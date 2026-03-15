@@ -64,7 +64,7 @@ export default {
         sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
-        sans: ['"Geist Sans"', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        sans: ['"Nanum Gothic"', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
         mono: ['"Geist Mono"', '"SF Mono"', '"Fira Code"', 'monospace'],
       },
       fontSize: {
