@@ -102,10 +102,21 @@ Return minimum 10 manufacturers if possible.
 """.strip()
 
 
+# ─── Ollama 가용성 체크 ───────────────────────────────────────
+def _check_ollama_available() -> bool:
+    import socket
+    try:
+        socket.setdefaulttimeout(2)
+        socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect(("localhost", 11434))
+        return True
+    except Exception:
+        return False
+
+
 # ─── Ollama 직접 호출 (JSON 스키마 모드) ──────────────────────
 async def _query_ollama(model_name: str, system_prompt: str, user_prompt: str) -> list[dict]:
     """tool calling 없이 Ollama JSON 스키마 모드로 직접 호출"""
-    async with httpx.AsyncClient(timeout=600.0) as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.post(
             f"{_OLLAMA_DIRECT}/api/chat",
             json={
@@ -140,33 +151,39 @@ async def _query_single_llm(
         manufacturers: list[RawManufacturer] = []
 
         if provider == LLMProvider.GEMINI:
-            # Gemini: OpenAI 호환 엔드포인트 사용
             model = OpenAIModel(
                 "gemini-2.5-flash",
                 base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
                 api_key=settings.GEMINI_API_KEY,
             )
-            agent = Agent(
-                model=model,
-                result_type=list[RawManufacturer],
-                system_prompt=SOURCING_SYSTEM_PROMPT,
-                retries=2,
+        elif provider == LLMProvider.QWEN:
+            model = OpenAIModel(
+                "qwen-plus",
+                base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+                api_key=settings.QWEN_API_KEY,
             )
-            result = await agent.run(prompt)
-            manufacturers = result.data
-            for m in manufacturers:
-                m.source_llm = provider
-
         else:
-            # Ollama 로컬 모델: JSON 스키마 모드 직접 호출
-            model_name = _OLLAMA_MODEL_MAP[provider]
+            # DeepSeek/GPT4O: Ollama 로컬 폴백
+            model_name = _OLLAMA_MODEL_MAP.get(provider, settings.OLLAMA_QWEN_MODEL)
             raw_items = await _query_ollama(model_name, SOURCING_SYSTEM_PROMPT, prompt)
             for item in raw_items:
                 item["source_llm"] = provider
                 try:
                     manufacturers.append(RawManufacturer.model_validate(item))
                 except Exception:
-                    pass  # 개별 항목 파싱 실패는 무시
+                    pass
+            return provider, manufacturers, None
+
+        agent = Agent(
+            model=model,
+            result_type=list[RawManufacturer],
+            system_prompt=SOURCING_SYSTEM_PROMPT,
+            retries=2,
+        )
+        result = await agent.run(prompt)
+        manufacturers = result.data
+        for m in manufacturers:
+            m.source_llm = provider
 
         logger.info("llm_sourcing_complete", provider=provider.value, count=len(manufacturers))
         return provider, manufacturers, None
@@ -195,7 +212,7 @@ async def run_multi_llm_sourcing(
     }
     """
     if providers is None:
-        providers = list(LLMProvider)
+        providers = [LLMProvider.GEMINI, LLMProvider.QWEN]
 
     prompt = _build_sourcing_prompt(
         ingredient=ingredient,

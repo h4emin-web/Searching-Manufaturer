@@ -21,10 +21,13 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
 
     # LLM API Keys
-    OPENAI_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
+    QWEN_API_KEY: str = ""
 
-    # Ollama (로컬 무료 LLM - API 키 불필요)
+    # Hunter.io (이메일 검색)
+    HUNTER_API_KEY: str = ""
+
+    # Ollama (로컬 전용)
     OLLAMA_BASE_URL: str = "http://localhost:11434/v1"
     OLLAMA_DEEPSEEK_MODEL: str = "deepseek-r1:8b"
     OLLAMA_QWEN_MODEL: str = "qwen2.5:7b"

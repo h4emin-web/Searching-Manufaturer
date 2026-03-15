@@ -9,6 +9,7 @@ import asyncio
 from urllib.parse import urljoin, urlparse
 from typing import TypedDict
 
+import httpx
 import structlog
 from bs4 import BeautifulSoup
 
@@ -253,6 +254,64 @@ def _build_extracted_contacts(found: dict, base_url: str) -> ExtractedContacts:
     )
 
 
+async def find_email_by_hunter(company_name: str, domain: str | None = None) -> str | None:
+    """Hunter.io로 회사 이메일 검색 (도메인 기반 또는 회사명 기반)"""
+    from ..config import get_settings
+    settings = get_settings()
+    if not settings.HUNTER_API_KEY:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            if domain:
+                # 도메인으로 이메일 검색
+                res = await client.get(
+                    "https://api.hunter.io/v2/domain-search",
+                    params={"domain": domain, "api_key": settings.HUNTER_API_KEY, "limit": 5},
+                )
+                data = res.json()
+                emails = data.get("data", {}).get("emails", [])
+                # sales/info/export 우선
+                priority = ("sales", "export", "info", "inquiry", "contact", "bd")
+                for p in priority:
+                    for e in emails:
+                        if p in e.get("value", "").lower():
+                            return e["value"]
+                if emails:
+                    return emails[0]["value"]
+            else:
+                # 회사명으로 검색
+                res = await client.get(
+                    "https://api.hunter.io/v2/domain-search",
+                    params={"company": company_name, "api_key": settings.HUNTER_API_KEY, "limit": 3},
+                )
+                data = res.json()
+                emails = data.get("data", {}).get("emails", [])
+                if emails:
+                    return emails[0]["value"]
+    except Exception as exc:
+        logger.warning("hunter_search_failed", company=company_name, error=str(exc))
+    return None
+
+
+async def find_email_hunter_verify(email: str) -> bool:
+    """Hunter.io로 이메일 유효성 검증"""
+    from ..config import get_settings
+    settings = get_settings()
+    if not settings.HUNTER_API_KEY:
+        return True  # 검증 불가 시 통과
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.get(
+                "https://api.hunter.io/v2/email-verifier",
+                params={"email": email, "api_key": settings.HUNTER_API_KEY},
+            )
+            data = res.json()
+            status = data.get("data", {}).get("status", "")
+            return status in ("valid", "accept_all")
+    except Exception:
+        return True
+
+
 def _empty_contacts() -> ExtractedContacts:
     return ExtractedContacts(
         email=None, wechat=None, whatsapp=None,
@@ -273,10 +332,28 @@ async def batch_crawl_contacts(
 
     async def _crawl_with_limit(mfr) -> tuple[str, ExtractedContacts]:
         async with semaphore:
+            # 1단계: 웹사이트 크롤링
             contacts = await crawl_manufacturer_contacts(mfr.website or "")
+
+            # 2단계: 크롤링으로 이메일 못 찾으면 Hunter.io 시도
+            if not contacts["email"] and (mfr.website or mfr.name):
+                from urllib.parse import urlparse
+                domain = urlparse(mfr.website).netloc if mfr.website else None
+                hunter_email = await find_email_by_hunter(mfr.name, domain)
+                if hunter_email:
+                    contacts = ExtractedContacts(
+                        email=hunter_email,
+                        wechat=contacts.get("wechat"),
+                        whatsapp=contacts.get("whatsapp"),
+                        phone=contacts.get("phone"),
+                        web_form_url=contacts.get("web_form_url"),
+                        raw_data=contacts.get("raw_data", {}),
+                    )
+                    logger.info("hunter_email_found", company=mfr.name, email=hunter_email)
+
             return mfr.id, contacts
 
-    tasks = [_crawl_with_limit(m) for m in manufacturers if m.website]
+    tasks = [_crawl_with_limit(m) for m in manufacturers]
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     return {
