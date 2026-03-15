@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pip install -r requirements.txt)",
+      "Bash(pip install:*)",
+      "Bash(curl -s http://localhost:8000/api/v1/sessions -X POST -H \"Content-Type: application/json\" -d \"{}\")",
+      "Bash(curl -s -X POST http://localhost:8000/api/v1/sessions/ -H \"Content-Type: application/json\" -d '{\"\"ingredient_name\"\": \"\"Ibuprofen\"\"}')",
+      "Bash(python -c \":*)"
+    ]
+  }
+}
