@@ -104,11 +104,13 @@ async def _query_gemini_native(
     if not api_key:
         raise ValueError("GEMINI_API_KEY not configured")
 
-    models_to_try = [
-        "gemini-1.5-flash",
-        "gemini-1.5-pro",
-        "gemini-pro",
-        "gemini-1.0-pro",
+    # v1beta supports more models; v1 is more stable but restrictive
+    endpoints_to_try = [
+        ("v1beta", "gemini-1.5-flash-latest"),
+        ("v1beta", "gemini-1.5-flash"),
+        ("v1beta", "gemini-2.0-flash"),
+        ("v1",     "gemini-1.5-flash"),
+        ("v1",     "gemini-1.0-pro"),
     ]
     full_prompt = f"{system_prompt}\n\n{user_prompt}\n\nReturn ONLY valid JSON, no markdown."
     payload = {
@@ -123,27 +125,28 @@ async def _query_gemini_native(
 
     last_error: Exception | None = None
     async with httpx.AsyncClient(timeout=timeout) as client:
-        for model in models_to_try:
-            url = f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent"
+        for api_ver, model in endpoints_to_try:
+            url = f"https://generativelanguage.googleapis.com/{api_ver}/models/{model}:generateContent"
             try:
                 resp = await client.post(url, params={"key": api_key}, json=payload)
                 if resp.status_code == 404:
-                    logger.warning("gemini_model_not_found", model=model)
+                    logger.warning("gemini_model_not_found", api_ver=api_ver, model=model)
                     continue
                 if not resp.is_success:
-                    logger.error("gemini_api_error", model=model, status=resp.status_code, body=resp.text[:500])
-                resp.raise_for_status()
+                    logger.error("gemini_api_error", api_ver=api_ver, model=model, status=resp.status_code, body=resp.text[:300])
+                    resp.raise_for_status()
                 content = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
                 result = _extract_manufacturers(content)
-                logger.info("gemini_native_parsed", model=model, count=len(result))
+                logger.info("gemini_success", api_ver=api_ver, model=model, count=len(result))
                 return result
-            except httpx.HTTPStatusError:
-                raise
+            except httpx.HTTPStatusError as e:
+                last_error = e
+                continue
             except Exception as e:
                 last_error = e
                 continue
 
-    raise last_error or RuntimeError("All Gemini models failed")
+    raise last_error or RuntimeError("All Gemini endpoints failed")
 
 
 # ─── Ollama 직접 호출 ──────────────────────────────────────────
