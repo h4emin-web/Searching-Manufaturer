@@ -5,7 +5,7 @@
 """
 from pydantic import BaseModel
 from pydantic_ai import Agent
-from pydantic_ai.models.gemini import GeminiModel
+from pydantic_ai.models.openai import OpenAIModel
 
 from ..config import get_settings
 from ..services.thread_store import EmailThread
@@ -95,7 +95,11 @@ async def generate_reply(thread: EmailThread) -> ReplyContent:
     lang_code = get_email_language(thread.country)
     lang_name = _LANGUAGE_NAMES.get(lang_code, "English")
 
-    model = GeminiModel("gemini-2.5-flash", api_key=settings.GEMINI_API_KEY)
+    model = OpenAIModel(
+        "gemini-2.5-flash",
+        base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+        api_key=settings.GEMINI_API_KEY,
+    )
     agent = Agent(
         model=model,
         result_type=ReplyContent,

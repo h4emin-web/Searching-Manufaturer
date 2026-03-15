@@ -11,7 +11,7 @@ import structlog
 import httpx
 
 from pydantic_ai import Agent
-from pydantic_ai.models.gemini import GeminiModel
+from pydantic_ai.models.openai import OpenAIModel
 
 from ..models.schemas import RawManufacturer, LLMProvider, UseCase
 from ..config import get_settings
@@ -140,8 +140,12 @@ async def _query_single_llm(
         manufacturers: list[RawManufacturer] = []
 
         if provider == LLMProvider.GEMINI:
-            # Gemini: pydantic-ai 사용 (tool calling 지원)
-            model = GeminiModel("gemini-2.5-flash", api_key=settings.GEMINI_API_KEY)
+            # Gemini: OpenAI 호환 엔드포인트 사용
+            model = OpenAIModel(
+                "gemini-2.5-flash",
+                base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+                api_key=settings.GEMINI_API_KEY,
+            )
             agent = Agent(
                 model=model,
                 result_type=list[RawManufacturer],
