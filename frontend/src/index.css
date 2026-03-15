@@ -1,0 +1,138 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 210 20% 10%;
+
+    --card: 0 0% 98%;
+    --card-foreground: 210 20% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 20% 10%;
+
+    --primary: 160 100% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 15% 95%;
+    --secondary-foreground: 210 20% 20%;
+
+    --muted: 210 10% 94%;
+    --muted-foreground: 210 10% 45%;
+
+    --accent: 25 100% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 210 15% 90%;
+    --input: 210 15% 92%;
+    --ring: 160 100% 40%;
+
+    --radius: 0.25rem;
+
+    --sidebar-background: 210 18% 6%;
+    --sidebar-foreground: 210 10% 85%;
+    --sidebar-primary: 160 100% 45%;
+    --sidebar-primary-foreground: 210 20% 4%;
+    --sidebar-accent: 210 15% 12%;
+    --sidebar-accent-foreground: 210 10% 85%;
+    --sidebar-border: 210 15% 15%;
+    --sidebar-ring: 160 100% 45%;
+
+    /* Custom tokens */
+    --surface-glass: rgba(0, 0, 0, 0.02);
+    --surface-glass-hover: rgba(0, 0, 0, 0.04);
+    --border-glass: rgba(0, 0, 0, 0.08);
+    --glow-primary: 0 0 20px hsla(160, 100%, 45%, 0.15);
+    --glow-accent: 0 0 20px hsla(25, 100%, 50%, 0.15);
+    --scanning-gradient: linear-gradient(90deg, transparent 0%, hsl(160, 100%, 45%, 0.08) 50%, transparent 100%);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Geist Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  /* Noise texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+  }
+}
+
+@layer utilities {
+  .font-mono {
+    font-family: 'Geist Mono', 'SF Mono', 'Fira Code', monospace;
+  }
+
+  .glass-surface {
+    background: var(--surface-glass);
+    border: 1px solid var(--border-glass);
+    backdrop-filter: blur(12px);
+  }
+
+  .glass-surface-hover {
+    background: var(--surface-glass-hover);
+  }
+
+  .glow-primary {
+    box-shadow: var(--glow-primary);
+  }
+
+  .glow-accent {
+    box-shadow: var(--glow-accent);
+  }
+
+  .text-data {
+    font-family: 'Geist Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.02em;
+  }
+
+  .scanning-line {
+    background: var(--scanning-gradient);
+    animation: scan 2s ease-in-out infinite;
+  }
+
+  @keyframes scan {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+  }
+
+  @keyframes terminal-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+
+  .animate-pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  .animate-terminal-blink {
+    animation: terminal-blink 1s step-end infinite;
+  }
+}
