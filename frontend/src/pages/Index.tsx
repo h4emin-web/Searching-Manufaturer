@@ -30,16 +30,7 @@ export interface Manufacturer {
   is_manually_added?: boolean;
 }
 
-const countryFlag: Record<string, string> = {
-  "India": "🇮🇳", "China": "🇨🇳", "Germany": "🇩🇪", "USA": "🇺🇸",
-  "Korea": "🇰🇷", "Japan": "🇯🇵", "France": "🇫🇷", "Italy": "🇮🇹",
-  "Spain": "🇪🇸", "UK": "🇬🇧", "Netherlands": "🇳🇱", "Switzerland": "🇨🇭",
-};
-
-const getFlag = (country: string) =>
-  countryFlag[country] || (country?.toLowerCase().includes("korea") ? "🇰🇷" :
-  country?.toLowerCase().includes("china") ? "🇨🇳" :
-  country?.toLowerCase().includes("india") ? "🇮🇳" : "🌏");
+const getFlag = (_country: string) => "";
 
 // ─── API helpers ──────────────────────────────────────────────
 async function apiSaveRequest(userName: string, req: SourcingRequest) {

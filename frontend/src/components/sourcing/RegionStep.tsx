@@ -7,12 +7,12 @@ interface RegionStepProps {
 }
 
 const regions = [
-  { id: "china", label: "중국", flag: "🇨🇳", count: "2,400+ 제조소", description: "가격 경쟁력, 대량 생산" },
-  { id: "india", label: "인도", flag: "🇮🇳", count: "1,800+ 제조소", description: "WHO-GMP 인증 다수, 제네릭 강국" },
-  { id: "europe", label: "유럽", flag: "🇪🇺", count: "600+ 제조소", description: "CEP 보유, 고품질 원료" },
-  { id: "usa", label: "미국", flag: "🇺🇸", count: "350+ 제조소", description: "FDA 직접 등록, 프리미엄" },
-  { id: "korea", label: "국내", flag: "🇰🇷", count: "120+ 제조소", description: "빠른 납기, KDMF 용이" },
-  { id: "other", label: "기타", flag: "🌏", count: "500+ 제조소", description: "일본, 대만, 이스라엘 등" },
+  { id: "china",  label: "중국" },
+  { id: "india",  label: "인도" },
+  { id: "europe", label: "유럽" },
+  { id: "usa",    label: "미국" },
+  { id: "korea",  label: "국내" },
+  { id: "other",  label: "기타 (일본, 대만 등)" },
 ];
 
 const RegionStep = ({ onSubmit, onBack }: RegionStepProps) => {
@@ -55,13 +55,10 @@ const RegionStep = ({ onSubmit, onBack }: RegionStepProps) => {
               `}
               style={isActive ? { borderColor: 'hsl(160, 100%, 45%, 0.4)' } : {}}
             >
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-xl">{region.flag}</span>
+              <div className="flex items-center gap-2">
                 <span className="font-semibold text-foreground">{region.label}</span>
                 {isActive && <div className="w-1.5 h-1.5 rounded-full bg-primary ml-auto animate-pulse-glow" />}
               </div>
-              <div className="text-data text-muted-foreground">{region.count}</div>
-              <div className="text-data text-muted-foreground mt-1">{region.description}</div>
             </motion.button>
           );
         })}

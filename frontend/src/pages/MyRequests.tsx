@@ -135,7 +135,6 @@ const MyRequests = ({ user, onNewRequest, onViewRequest, onViewAll, apiBase }: M
             animate={{ opacity: 1, y: 0 }}
             className="glass-surface rounded-sm p-12 text-center space-y-4"
           >
-            <div className="text-4xl">🔬</div>
             <p className="text-muted-foreground text-ui">아직 소싱 요청이 없습니다.</p>
             <button
               onClick={onNewRequest}
