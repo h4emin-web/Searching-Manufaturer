@@ -164,7 +164,7 @@ async def _query_single_llm(
             raw_items = await _query_openai_compatible(
                 base_url="https://generativelanguage.googleapis.com/v1beta/openai",
                 api_key=settings.GEMINI_API_KEY or "",
-                model="gemini-2.5-flash",
+                model="gemini-2.0-flash",
                 system_prompt=SYSTEM_PROMPT,
                 user_prompt=prompt,
             )

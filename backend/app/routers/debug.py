@@ -2,6 +2,7 @@
 개발/테스트용 디버그 엔드포인트
 - 스레드 수동 등록
 - IMAP 즉시 폴링
+- LLM 직접 테스트
 """
 import asyncio
 from fastapi import APIRouter
@@ -48,6 +49,45 @@ async def poll_now():
         await handle_reply(reply)
         processed += 1
     return {"status": "done", "replies_found": len(replies), "processed": processed}
+
+
+@router.get("/test-llm")
+async def test_llm():
+    """LLM API 직접 테스트 — 응답 raw 확인용"""
+    from ..agents.sourcing_agent import _query_openai_compatible, _query_ollama
+    from ..config import get_settings
+    settings = get_settings()
+    results = {}
+
+    # Gemini
+    try:
+        items = await _query_openai_compatible(
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai",
+            api_key=settings.GEMINI_API_KEY or "",
+            model="gemini-2.0-flash",
+            system_prompt="You are a helpful assistant. Return JSON only.",
+            user_prompt='List 2 real pharmaceutical manufacturers of Ibuprofen as JSON: {"manufacturers":[{"name":"...","country":"..."}]}',
+            timeout=30.0,
+        )
+        results["gemini"] = {"status": "ok", "count": len(items), "sample": items[:1]}
+    except Exception as e:
+        results["gemini"] = {"status": "error", "error": str(e)}
+
+    # Qwen
+    try:
+        items = await _query_openai_compatible(
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            api_key=settings.QWEN_API_KEY or "",
+            model="qwen-plus",
+            system_prompt="You are a helpful assistant. Return JSON only.",
+            user_prompt='List 2 real pharmaceutical manufacturers of Ibuprofen as JSON: {"manufacturers":[{"name":"...","country":"..."}]}',
+            timeout=30.0,
+        )
+        results["qwen"] = {"status": "ok", "count": len(items), "sample": items[:1]}
+    except Exception as e:
+        results["qwen"] = {"status": "error", "error": str(e)}
+
+    return results
 
 
 @router.get("/threads")

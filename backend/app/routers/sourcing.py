@@ -72,10 +72,15 @@ async def _run_sourcing(task_id: str, req: SourcingRequest):
         _tasks[task_id].llm_results = raw_result["llm_results"]
         _tasks[task_id].total_raw = raw_result["total_raw"]
 
-        # LLM 에러 기록
-        if raw_result.get("errors"):
-            err_summary = "; ".join(f"{k.value}: {v[:80]}" for k, v in raw_result["errors"].items())
-            _tasks[task_id].error = err_summary
+        # LLM 에러 또는 0개 결과 처리
+        errors = raw_result.get("errors", {})
+        if raw_result["total_raw"] == 0:
+            err_msg = " | ".join(f"{k.value}: {str(v)[:120]}" for k, v in errors.items()) if errors else "LLM 응답에서 제조소를 파싱하지 못했습니다"
+            _tasks[task_id].status = "failed"
+            _tasks[task_id].error = err_msg
+            return
+        elif errors:
+            _tasks[task_id].error = " | ".join(f"{k.value}: {str(v)[:80]}" for k, v in errors.items())
 
         # 2. 중복 제거 + 병합
         dedup_result = deduplicate_manufacturers(raw_result["llm_results"])
