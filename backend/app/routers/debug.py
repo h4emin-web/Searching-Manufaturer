@@ -104,3 +104,36 @@ async def list_threads():
         }
         for t in thread_store.all_threads()
     ]
+
+
+@router.get("/imap-check")
+async def imap_check():
+    """IMAP 연결 직접 테스트 - 인증 오류 진단용"""
+    import imaplib
+    from ..config import get_settings
+    settings = get_settings()
+
+    imap_user = settings.IMAP_USER or settings.SMTP_USER
+    imap_pass = settings.IMAP_PASSWORD or settings.SMTP_PASSWORD
+
+    result = {
+        "imap_user": imap_user,
+        "imap_password_length": len(imap_pass) if imap_pass else 0,
+        "imap_password_preview": imap_pass[:4] + "..." if imap_pass else "(empty)",
+        "has_spaces": " " in imap_pass if imap_pass else False,
+        "status": None,
+        "error": None,
+    }
+
+    try:
+        with imaplib.IMAP4_SSL("imap.gmail.com", 993) as imap:
+            imap.login(imap_user, imap_pass)
+            result["status"] = "success"
+    except imaplib.IMAP4.error as e:
+        result["status"] = "auth_failed"
+        result["error"] = str(e)
+    except Exception as e:
+        result["status"] = "connection_error"
+        result["error"] = str(e)
+
+    return result
