@@ -137,3 +137,43 @@ async def imap_check():
         result["error"] = str(e)
 
     return result
+
+@router.get("/gmail-check")
+async def gmail_check():
+    """Gmail OAuth 연결 진단"""
+    import httpx
+    from ..config import get_settings
+    settings = get_settings()
+
+    result = {
+        "GMAIL_CLIENT_ID": bool(settings.GMAIL_CLIENT_ID),
+        "GMAIL_CLIENT_SECRET": bool(settings.GMAIL_CLIENT_SECRET),
+        "GMAIL_REFRESH_TOKEN": bool(settings.GMAIL_REFRESH_TOKEN),
+        "client_id_preview": settings.GMAIL_CLIENT_ID[:20] + "..." if settings.GMAIL_CLIENT_ID else "(empty)",
+        "refresh_token_preview": settings.GMAIL_REFRESH_TOKEN[:10] + "..." if settings.GMAIL_REFRESH_TOKEN else "(empty)",
+        "token_status": None,
+        "error": None,
+    }
+
+    if not all([settings.GMAIL_CLIENT_ID, settings.GMAIL_CLIENT_SECRET, settings.GMAIL_REFRESH_TOKEN]):
+        result["token_status"] = "missing_credentials"
+        return result
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post("https://oauth2.googleapis.com/token", data={
+                "client_id": settings.GMAIL_CLIENT_ID,
+                "client_secret": settings.GMAIL_CLIENT_SECRET,
+                "refresh_token": settings.GMAIL_REFRESH_TOKEN,
+                "grant_type": "refresh_token",
+            })
+            if resp.is_success:
+                result["token_status"] = "success"
+            else:
+                result["token_status"] = "failed"
+                result["error"] = resp.text[:200]
+    except Exception as e:
+        result["token_status"] = "error"
+        result["error"] = str(e)
+
+    return result
