@@ -134,12 +134,17 @@ const SurveyStep = ({ onSubmit, onBack }: SurveyStepProps) => {
           ))}
         </div>
         {endUserDisclosure === "불가능" && (
-          <input
-            value={disclosureTo}
-            onChange={(e) => setDisclosureTo(e.target.value)}
-            placeholder="공개 불가 시 어느 회사로 밝히면 되는지 입력"
-            className="w-full glass-surface rounded-sm px-4 py-2.5 text-foreground text-ui bg-transparent focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/50"
-          />
+          <div className="space-y-2">
+            <input
+              value={disclosureTo}
+              onChange={(e) => setDisclosureTo(e.target.value)}
+              placeholder="공개 불가 시 어느 회사로 밝히면 되는지 입력"
+              className="w-full glass-surface rounded-sm px-4 py-2.5 text-foreground text-ui bg-transparent focus:outline-none focus:ring-1 focus:ring-primary placeholder:text-muted-foreground/50"
+            />
+            <div className="text-data text-accent font-mono px-1">
+              고객사명은 제조원에 공개되지 않습니다. 소싱 메일에 고객사명 없이 진행됩니다.
+            </div>
+          </div>
         )}
       </div>
 

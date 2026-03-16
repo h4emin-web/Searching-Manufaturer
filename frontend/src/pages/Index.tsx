@@ -5,7 +5,7 @@ import SearchStep from "@/components/sourcing/SearchStep";
 import PurposeStep from "@/components/sourcing/PurposeStep";
 import RequirementsStep from "@/components/sourcing/RequirementsStep";
 import RegionStep from "@/components/sourcing/RegionStep";
-import DocumentStep from "@/components/sourcing/DocumentStep";
+import DocumentStep, { DocumentData } from "@/components/sourcing/DocumentStep";
 import SurveyStep, { SurveyData } from "@/components/sourcing/SurveyStep";
 import ResultsStep from "@/components/sourcing/ResultsStep";
 import AgentTerminal from "@/components/sourcing/AgentTerminal";
@@ -102,6 +102,8 @@ const Index = () => {
   const [currentTaskId, setCurrentTaskId] = useState<string>("");
   const [currentOutreachPlanId, setCurrentOutreachPlanId] = useState<string>("");
   const [outreachManufacturers, setOutreachManufacturers] = useState<Manufacturer[]>([]);
+  const [logoutConfirm, setLogoutConfirm] = useState(false);
+  const [documentData, setDocumentData] = useState<DocumentData | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const userRef = useRef(user);
   useEffect(() => { userRef.current = user; }, [user]);
@@ -192,6 +194,14 @@ const Index = () => {
     setView("requests");
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem("pharma_user");
+    setUser(null);
+    setView("login");
+    setLogoutConfirm(false);
+    if (pollRef.current) clearInterval(pollRef.current);
+  };
+
   const handleNewRequest = () => {
     setStep("search");
     setApiName(""); setPurpose(""); setRequirements([]);
@@ -249,7 +259,8 @@ const Index = () => {
 
   const handleRegion = (r: string[]) => { setRegions(r); setStep("documents"); };
 
-  const handleDocuments = async () => {
+  const handleDocuments = async (data?: DocumentData) => {
+    if (data) setDocumentData(data);
     setStep("searching");
     setSourcingProgress(0);
     setSourcingError("");
@@ -375,24 +386,6 @@ const Index = () => {
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
   if (view === "login") return <LoginStep onLogin={handleLogin} />;
-  if (view === "all-requests" && user) {
-    return <AllRequests onBack={() => setView("requests")} apiBase={API_BASE} />;
-  }
-  if (view === "my-progress" && user) {
-    return <AllRequests onBack={() => setView("requests")} apiBase={API_BASE} filterUser={user.koreanName} />;
-  }
-  if (view === "requests" && user) {
-    return (
-      <MyRequests
-        user={user}
-        onNewRequest={handleNewRequest}
-        onViewRequest={handleViewRequest}
-        onViewAll={() => setView("all-requests")}
-        onViewMyProgress={() => setView("my-progress")}
-        apiBase={API_BASE}
-      />
-    );
-  }
 
   const progressWidth =
     step === "purpose" ? "16%" : step === "survey" ? "33%" :
@@ -401,11 +394,28 @@ const Index = () => {
     (step === "searching" || step === "results" || step === "sourcing") ? "100%" : "0%";
 
   return (
-    <div className="min-h-screen bg-background">
+    <>
+      {view === "requests" && user && (
+        <MyRequests
+          user={user}
+          onNewRequest={handleNewRequest}
+          onViewRequest={handleViewRequest}
+          onViewAll={() => setView("all-requests")}
+          onViewMyProgress={() => setView("my-progress")}
+          apiBase={API_BASE}
+        />
+      )}
+      {(view === "all-requests") && user && (
+        <AllRequests onBack={() => setView("requests")} apiBase={API_BASE} />
+      )}
+      {(view === "my-progress") && user && (
+        <AllRequests onBack={() => setView("requests")} apiBase={API_BASE} filterUser={user.koreanName} />
+      )}
+      <div style={{ display: view === "sourcing" ? "block" : "none" }} className="min-h-screen bg-background">
       <header className="border-b border-border px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-2 h-2 rounded-full bg-primary" />
-          <span className="font-semibold text-foreground tracking-tight">Pharma Sourcing</span>
+          <button onClick={() => user && setView("requests")} className={`font-semibold tracking-tight transition-colors ${user ? "text-foreground hover:text-primary cursor-pointer" : "text-foreground"}`}>Pharma Sourcing</button>
           <span className="text-data text-muted-foreground font-mono">v1.0</span>
         </div>
         <div className="flex items-center gap-4">
@@ -423,17 +433,26 @@ const Index = () => {
               새 소싱
             </button>
           )}
-          <span className="text-data text-muted-foreground font-mono">
-            {user?.koreanName} —{" "}
-            {step === "search" && "원료 입력"}
-            {step === "purpose" && "Step 1/6"}
-            {step === "survey" && "Step 2/6"}
-            {step === "requirements" && "Step 3/6"}
-            {step === "region" && "Step 4/6"}
-            {step === "documents" && "Step 5/6"}
-            {step === "searching" && "AI 검색 중..."}
-            {step === "results" && "Step 5/5"}
-            {step === "sourcing" && "소싱 진행 중"}
+          <span className="text-data font-mono flex items-center gap-1">
+            <button
+              onClick={() => { if (logoutConfirm) { handleLogout(); } else { setLogoutConfirm(true); } }}
+              onBlur={() => setTimeout(() => setLogoutConfirm(false), 150)}
+              className={`transition-colors cursor-pointer ${logoutConfirm ? "text-destructive" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              {logoutConfirm ? "로그아웃?" : user?.koreanName}
+            </button>
+            <span className="text-muted-foreground">
+              {" "}—{" "}
+              {step === "search" && "원료 입력"}
+              {step === "purpose" && "Step 1/6"}
+              {step === "survey" && "Step 2/6"}
+              {step === "requirements" && "Step 3/6"}
+              {step === "region" && "Step 4/6"}
+              {step === "documents" && "Step 5/6"}
+              {step === "searching" && "AI 검색 중..."}
+              {step === "results" && "Step 5/5"}
+              {step === "sourcing" && "소싱 진행 중"}
+            </span>
           </span>
         </div>
       </header>
@@ -536,7 +555,8 @@ const Index = () => {
           apiBase={API_BASE}
         />
       )}
-    </div>
+      </div>
+    </>
   );
 };
 

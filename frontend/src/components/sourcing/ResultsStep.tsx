@@ -175,7 +175,7 @@ const ResultsStep = ({ apiName, manufacturers, onStartSourcing, onSearchMore, ge
           onClick={onSearchMore}
           className="glass-surface hover:glass-surface-hover px-4 py-2.5 rounded-sm text-ui text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
         >
-          🔍 다시 검색
+          다시 검색
         </button>
         <div className="flex-1" />
         <button
@@ -183,7 +183,7 @@ const ResultsStep = ({ apiName, manufacturers, onStartSourcing, onSearchMore, ge
           disabled={visible.length === 0}
           className="bg-primary text-primary-foreground px-8 py-2.5 rounded-sm font-semibold text-ui hover:opacity-90 transition-opacity disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
         >
-          🚀 {visible.length}개 제조소 소싱 시작
+          {visible.length}개 제조소 소싱 시작
         </button>
       </div>
 
