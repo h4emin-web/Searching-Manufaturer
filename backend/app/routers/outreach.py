@@ -68,6 +68,73 @@ async def get_simple_plan(plan_id: str):
     return plan
 
 
+@router.get("/simple-plans/{plan_id}/threads")
+async def get_plan_threads(plan_id: str):
+    """플랜별 이메일 스레드 대화 내용 조회"""
+    plan = _simple_plans.get(plan_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+
+    from ..services.thread_store import thread_store
+    threads = thread_store.find_by_plan(plan_id)
+    thread_map = {t.manufacturer_id: t for t in threads}
+
+    result = []
+    for item in plan["items"]:
+        thread = thread_map.get(item["id"])
+        result.append({
+            "manufacturer_id": item["id"],
+            "manufacturer_name": item["name"],
+            "country": item.get("country", ""),
+            "email": item.get("email", ""),
+            "status": item.get("status", "pending"),
+            "sent_at": item.get("sent_at", ""),
+            "email_subject": item.get("email_subject", ""),
+            "email_body": item.get("email_body", ""),
+            "web_form_url": item.get("web_form_url", ""),
+            "error": item.get("error", ""),
+            "escalated_questions": item.get("escalated_questions", []),
+            "missing_items": item.get("missing_items", []),
+            "conversation": thread.conversation if thread else [],
+            "has_reply": thread.has_reply if thread else False,
+            "auto_reply_count": thread.auto_reply_count if thread else 0,
+        })
+    return result
+
+
+class TranslateRequest(BaseModel):
+    text: str
+    target: str = "Korean"
+
+
+@router.post("/translate")
+async def translate_text(req: TranslateRequest):
+    """Gemini로 텍스트 번역"""
+    import httpx, re
+    from ..config import get_settings
+    settings = get_settings()
+    if not settings.GEMINI_API_KEY or not req.text.strip():
+        return {"translated": ""}
+
+    prompt = f"Translate the following text to {req.target}. Return only the translated text, no explanation.
+
+{req.text[:3000]}"
+    headers = {"Content-Type": "application/json", "X-goog-api-key": settings.GEMINI_API_KEY}
+    payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.1, "maxOutputTokens": 2048}}
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        for model in ["gemini-2.0-flash-lite", "gemini-flash-latest"]:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+            try:
+                resp = await client.post(url, headers=headers, json=payload)
+                if resp.is_success:
+                    text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                    return {"translated": text.strip()}
+            except Exception:
+                continue
+    return {"translated": ""}
+
+
 async def _crawl_email_httpx(website: str) -> tuple[str | None, str | None]:
     """httpx로 웹사이트에서 이메일 + 웹폼 URL 추출 (Playwright 없이)"""
     if not website or not website.startswith("http"):
@@ -133,8 +200,12 @@ async def _process_one_manufacturer(plan_id: str, idx: int, item: dict, req: Sim
             manufacturer_id=item["id"],
         )
         if success:
+            from datetime import datetime
             items[idx]["status"] = "sent"
             items[idx]["contact_method"] = "email"
+            items[idx]["email_subject"] = subject
+            items[idx]["email_body"] = body
+            items[idx]["sent_at"] = datetime.utcnow().isoformat()
             logger.info("outreach_sent", manufacturer=item["name"], email=email)
         else:
             items[idx]["status"] = "failed"

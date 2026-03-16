@@ -128,6 +128,9 @@ class ThreadStore:
         thread.missing_items = missing
         self._bg(self._update_thread(thread))
 
+    def find_by_plan(self, plan_id: str) -> list[EmailThread]:
+        return [t for t in self._threads.values() if t.plan_id == plan_id]
+
     def all_threads(self) -> list[EmailThread]:
         return list(self._threads.values())
 
@@ -153,6 +156,8 @@ class ThreadStore:
             follow_up_count=row.get("follow_up_count", 0),
             has_reply=row.get("has_reply", False),
             last_sent_at=row.get("last_sent_at", ""),
+            plan_id=row.get("plan_id", ""),
+            manufacturer_id=row.get("manufacturer_id", ""),
             conversation=row.get("conversation", []),
         )
 
@@ -173,6 +178,8 @@ class ThreadStore:
                 "follow_up_count": thread.follow_up_count,
                 "has_reply": thread.has_reply,
                 "last_sent_at": thread.last_sent_at,
+                "plan_id": thread.plan_id,
+                "manufacturer_id": thread.manufacturer_id,
                 "conversation": thread.conversation,
             })
         except Exception as exc:

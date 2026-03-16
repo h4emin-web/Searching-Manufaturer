@@ -8,7 +8,7 @@ import RegionStep from "@/components/sourcing/RegionStep";
 import DocumentStep, { DocumentData } from "@/components/sourcing/DocumentStep";
 import SurveyStep, { SurveyData } from "@/components/sourcing/SurveyStep";
 import ResultsStep from "@/components/sourcing/ResultsStep";
-import AgentTerminal from "@/components/sourcing/AgentTerminal";
+import SourcingDashboard from "@/components/sourcing/SourcingDashboard";
 import MyRequests, { SourcingRequest } from "@/pages/MyRequests";
 import AllRequests from "@/pages/AllRequests";
 
@@ -542,19 +542,23 @@ const Index = () => {
               getFlag={getFlag}
             />
           )}
+          {step === "sourcing" && (
+            <motion.div
+              key="sourcing"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+            >
+              <SourcingDashboard
+                apiName={apiName}
+                manufacturers={outreachManufacturers}
+                outreachPlanId={currentOutreachPlanId}
+                apiBase={API_BASE}
+              />
+            </motion.div>
+          )}
         </AnimatePresence>
       </main>
-
-      {step === "sourcing" && (
-        <AgentTerminal
-          apiName={apiName}
-          isActive={true}
-          sessionId={sessionId}
-          manufacturers={outreachManufacturers}
-          outreachPlanId={currentOutreachPlanId}
-          apiBase={API_BASE}
-        />
-      )}
       </div>
     </>
   );
