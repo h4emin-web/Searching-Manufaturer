@@ -14,9 +14,8 @@ interface DocumentStepProps {
 }
 
 const topItems = [
-  { id: "pricing", label: "단가", description: "CIF Busan 기준 수량별 단가 문의" },
-  { id: "moq",     label: "MOQ",  description: "최소 주문 수량 문의" },
-  { id: "sample",  label: "샘플", description: "평가용 무상 샘플 요청" },
+  { id: "pricing_moq", label: "단가 / MOQ", description: "CIF Busan 수량별 단가 및 최소 주문 수량 문의" },
+  { id: "sample",      label: "샘플",       description: "평가용 무상 샘플 요청" },
 ];
 
 const docItems = [
@@ -29,13 +28,13 @@ const docItems = [
 ];
 
 const DocumentStep = ({ onSubmit, onBack }: DocumentStepProps) => {
-  const [selected, setSelected] = useState<string[]>(["pricing", "moq", "sample"]);
+  const [selected, setSelected] = useState<string[]>(["pricing_moq", "sample"]);
   const [pricingInput, setPricingInput] = useState("");
   const [pricingQuantities, setPricingQuantities] = useState<string[]>([]);
   const [sampleAmount, setSampleAmount] = useState("");
   const [customNote, setCustomNote] = useState("");
 
-  const showPricing = selected.includes("pricing");
+  const showPricing = selected.includes("pricing_moq");
   const showSample  = selected.includes("sample");
 
   const toggle = (id: string) => {
@@ -101,7 +100,7 @@ const DocumentStep = ({ onSubmit, onBack }: DocumentStepProps) => {
               </motion.button>
 
               {/* 단가 수량 입력 */}
-              {item.id === "pricing" && showPricing && (
+              {item.id === "pricing_moq" && showPricing && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
