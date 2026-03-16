@@ -1,0 +1,50 @@
+{
+  "name": "business-manager",
+  "version": "1.0.0",
+  "description": "원료/샘플 업무 관리 앱",
+  "main": "src/main/main.js",
+  "scripts": {
+    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
+    "build": "vite build && electron-builder",
+    "vite": "vite",
+    "electron": "electron ."
+  },
+  "build": {
+    "appId": "com.business.manager",
+    "productName": "업무관리",
+    "win": {
+      "target": "nsis",
+      "icon": "public/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "files": [
+      "dist/**/*",
+      "src/main/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    }
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.99.1",
+    "@tanstack/react-table": "^8.21.3",
+    "@vitejs/plugin-react": "^5.1.4",
+    "electron": "^41.0.0",
+    "electron-builder": "^26.8.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "vite": "^7.3.1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "wait-on": "^9.0.4"
+  }
+}
