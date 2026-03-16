@@ -109,27 +109,28 @@ class TranslateRequest(BaseModel):
 
 @router.post("/translate")
 async def translate_text(req: TranslateRequest):
-    """Gemini로 텍스트 번역"""
-    import httpx, re
+    import httpx
     from ..config import get_settings
     settings = get_settings()
     if not settings.GEMINI_API_KEY or not req.text.strip():
         return {"translated": ""}
-
-    prompt = f"Translate the following text to {req.target}. Return only the translated text, no explanation.
-
-{req.text[:3000]}"
-    headers = {"Content-Type": "application/json", "X-goog-api-key": settings.GEMINI_API_KEY}
-    payload = {"contents": [{"parts": [{"text": prompt}]}], "generationConfig": {"temperature": 0.1, "maxOutputTokens": 2048}}
-
+    instruction = "Return only the translated text, no explanation."
+    target_lang = req.target
+    prompt = "Translate to " + target_lang + ". Return only the translated text. Text: " + req.text[:3000]
+    api_headers = {"Content-Type": "application/json", "X-goog-api-key": settings.GEMINI_API_KEY}
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.1, "maxOutputTokens": 2048}
+    }
     async with httpx.AsyncClient(timeout=20.0) as client:
-        for model in ["gemini-2.0-flash-lite", "gemini-flash-latest"]:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        for model in ["gemini-2.0-flash", "gemini-2.0-flash-lite"]:
+            base = "https://generativelanguage.googleapis.com/v1beta/models/"
+            url = base + model + ":generateContent"
             try:
-                resp = await client.post(url, headers=headers, json=payload)
+                resp = await client.post(url, headers=api_headers, json=payload)
                 if resp.is_success:
-                    text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-                    return {"translated": text.strip()}
+                    result = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                    return {"translated": result.strip()}
             except Exception:
                 continue
     return {"translated": ""}
