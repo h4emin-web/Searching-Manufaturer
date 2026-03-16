@@ -1,6 +1,6 @@
 """
 이메일 발송 서비스
-- Resend API (Railway 권장 - HTTPS, 포트 차단 없음)
+- Brevo API (Railway 권장 - HTTPS, 포트 차단 없음)
 - aiosmtplib SMTP (로컬/서버에서 SMTP 허용 시 fallback)
 """
 from email.message import EmailMessage
@@ -19,11 +19,13 @@ async def _send_via_brevo(
     from_email: str,
     subject: str,
     body: str,
+    message_id: str | None = None,
+    in_reply_to: str | None = None,
     reply_to: str | None = None,
 ) -> tuple[bool, str | None]:
     """Brevo API로 이메일 발송 (HTTPS, Railway 호환)"""
     import httpx
-    headers = {
+    api_headers = {
         "api-key": settings.BREVO_API_KEY,
         "Content-Type": "application/json",
     }
@@ -36,11 +38,21 @@ async def _send_via_brevo(
     if reply_to:
         payload["replyTo"] = {"email": reply_to}
 
+    # Message-ID / In-Reply-To 헤더 주입 (스레드 매칭 핵심)
+    email_headers: dict[str, str] = {}
+    if message_id:
+        email_headers["Message-ID"] = message_id
+    if in_reply_to:
+        email_headers["In-Reply-To"] = in_reply_to
+        email_headers["References"] = in_reply_to
+    if email_headers:
+        payload["headers"] = email_headers
+
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post("https://api.brevo.com/v3/smtp/email", headers=headers, json=payload)
+            resp = await client.post("https://api.brevo.com/v3/smtp/email", headers=api_headers, json=payload)
         if resp.is_success:
-            logger.info("brevo_api_success", to=to_email, id=resp.json().get("messageId"))
+            logger.info("brevo_api_success", to=to_email, message_id=message_id)
             return True, None
         return False, f"Brevo {resp.status_code}: {resp.text[:300]}"
     except Exception as exc:
@@ -101,11 +113,11 @@ async def send_outreach_email(
 ) -> tuple[bool, str | None]:
     """
     아웃리치 이메일 발송
-    Resend API 우선, 없으면 SMTP fallback
+    Brevo API 우선, 없으면 SMTP fallback
     Returns: (success, error_message)
     """
     final_message_id = message_id or make_msgid(domain="pharma-sourcing.local")
-    from_email = settings.FROM_EMAIL or "onboarding@resend.dev"
+    from_email = settings.FROM_EMAIL or settings.SMTP_USER
 
     parts = [p for p in [body_en, body_ko and f"\n---\n[Korean / 한국어]\n{body_ko}", body_zh and f"\n---\n[Chinese / 中文]\n{body_zh}"] if p]
     full_body = "\n".join(parts)
@@ -118,18 +130,20 @@ async def send_outreach_email(
         subject = f"[TEST→{to_email}] {subject}"
         logger.info("email_test_override", original_to=to_email, override_to=actual_to)
 
-    # Brevo 우선, Resend fallback, SMTP 최후
+    # Brevo 우선, SMTP fallback
     if settings.BREVO_API_KEY:
-        success, error = await _send_via_brevo(actual_to, from_email, subject, full_body, reply_to)
+        success, error = await _send_via_brevo(
+            actual_to, from_email, subject, full_body,
+            message_id=final_message_id,
+            in_reply_to=in_reply_to,
+            reply_to=reply_to,
+        )
         method = "brevo"
-    elif settings.RESEND_API_KEY:
-        success, error = await _send_via_resend(actual_to, from_email, subject, full_body, final_message_id, reply_to)
-        method = "resend"
     elif settings.SMTP_USER and settings.SMTP_PASSWORD:
         success, error = await _send_via_smtp(actual_to, from_email, subject, full_body, final_message_id, in_reply_to)
         method = "smtp"
     else:
-        return False, "이메일 발송 설정 없음 (RESEND_API_KEY 또는 SMTP 자격증명 필요)"
+        return False, "이메일 발송 설정 없음 (BREVO_API_KEY 또는 SMTP 자격증명 필요)"
 
     if success:
         logger.info("email_sent", method=method, to=to_email, manufacturer=manufacturer_name)
