@@ -61,7 +61,7 @@ async def _check_all_threads() -> None:
             )
 
             if success:
-                thread.follow_up_count += 1
+                thread_store.increment_followup(thread)
                 thread_store.add_our_reply(thread, new_msg_id, email_data["body"])
                 logger.info("followup_sent", manufacturer=thread.manufacturer_name,
                             follow_up_num=follow_up_num)

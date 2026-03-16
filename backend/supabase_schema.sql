@@ -49,3 +49,12 @@ CREATE POLICY "service_only" ON email_threads
 
 CREATE POLICY "service_only" ON thread_message_index
     USING (auth.role() = 'service_role');
+
+-- ============================================================
+-- Migration: 누락된 thread 상태 컬럼 추가
+-- Railway 재시작 후 상태 복원을 위해 필요
+-- ============================================================
+ALTER TABLE email_threads
+  ADD COLUMN IF NOT EXISTS follow_up_count  INTEGER DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS has_reply        BOOLEAN DEFAULT FALSE,
+  ADD COLUMN IF NOT EXISTS last_sent_at     TIMESTAMPTZ;

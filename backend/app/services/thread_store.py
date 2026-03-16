@@ -22,13 +22,13 @@ class EmailThread:
     country: str = ""
     auto_reply_count: int = 0
     max_auto_replies: int = 3
-    follow_up_count: int = 0          # 팔로업 발송 횟수 (최대 2)
-    has_reply: bool = False            # 제조사로부터 답장 수신 여부
-    last_sent_at: str = ""             # 마지막 발송 시각 (ISO)
-    escalated_questions: list[str] = field(default_factory=list)  # 요청자 답변 필요 질문
-    missing_items: list[str] = field(default_factory=list)        # 아직 미답 항목
-    plan_id: str = ""                  # 연결된 outreach plan_id
-    manufacturer_id: str = ""         # 연결된 제조사 id
+    follow_up_count: int = 0
+    has_reply: bool = False
+    last_sent_at: str = ""
+    escalated_questions: list[str] = field(default_factory=list)
+    missing_items: list[str] = field(default_factory=list)
+    plan_id: str = ""
+    manufacturer_id: str = ""
     conversation: list[dict] = field(default_factory=list)
 
 
@@ -101,6 +101,11 @@ class ThreadStore:
         self._bg(self._update_thread(thread))
         self._bg(self._persist_index(message_id, thread.message_id))
 
+    def increment_followup(self, thread: EmailThread) -> None:
+        """팔로업 카운트 증가 + DB 저장"""
+        thread.follow_up_count += 1
+        self._bg(self._update_thread(thread))
+
     def can_auto_reply(self, thread: EmailThread) -> bool:
         return thread.auto_reply_count < thread.max_auto_replies
 
@@ -111,7 +116,6 @@ class ThreadStore:
         """마지막 발송 후 hours 시간 경과 여부"""
         if not thread.last_sent_at or thread.has_reply:
             return False
-        from datetime import timezone
         try:
             last = datetime.fromisoformat(thread.last_sent_at)
             elapsed = (datetime.utcnow() - last).total_seconds() / 3600
@@ -146,6 +150,9 @@ class ThreadStore:
             country=row.get("country", ""),
             auto_reply_count=row.get("auto_reply_count", 0),
             max_auto_replies=row.get("max_auto_replies", 3),
+            follow_up_count=row.get("follow_up_count", 0),
+            has_reply=row.get("has_reply", False),
+            last_sent_at=row.get("last_sent_at", ""),
             conversation=row.get("conversation", []),
         )
 
@@ -163,6 +170,9 @@ class ThreadStore:
                 "country": thread.country,
                 "auto_reply_count": thread.auto_reply_count,
                 "max_auto_replies": thread.max_auto_replies,
+                "follow_up_count": thread.follow_up_count,
+                "has_reply": thread.has_reply,
+                "last_sent_at": thread.last_sent_at,
                 "conversation": thread.conversation,
             })
         except Exception as exc:
@@ -175,7 +185,10 @@ class ThreadStore:
             await self._db.update("email_threads", {
                 "conversation": thread.conversation,
                 "last_message_id": thread.last_message_id,
+                "last_sent_at": thread.last_sent_at,
                 "auto_reply_count": thread.auto_reply_count,
+                "follow_up_count": thread.follow_up_count,
+                "has_reply": thread.has_reply,
             }, {"message_id": thread.message_id})
         except Exception as exc:
             logger.warning("thread_update_failed", error=str(exc))
