@@ -1,10 +1,10 @@
-# 🔬 Pharma Manufacturer Sourcing Agent
+# Pharma Manufacturer Sourcing Agent
 
 의약품 원료 제조원을 AI로 탐색하고, 소싱 이메일 발송부터 답변 분석 · 자동 재질문 · 리마인더까지 자동화하는 풀스택 시스템입니다.
 
 ---
 
-## 📐 전체 아키텍처
+## 전체 아키텍처
 
 ```
 사용자 (Frontend)
@@ -33,8 +33,8 @@
 │                     │                               │
 │  ┌──────────────────▼──────────────────┐            │
 │  │  백그라운드 루프 (2개 병렬)           │            │
-│  │  ① Email Receiver (IMAP 5분 폴링)   │            │
-│  │  ② Followup Scheduler (30분 체크)   │            │
+│  │  1. Email Receiver (IMAP 5분 폴링)  │            │
+│  │  2. Followup Scheduler (30분 체크)  │            │
 │  └─────────────────────────────────────┘            │
 └─────────────────────────────────────────────────────┘
       │                          │
@@ -45,7 +45,7 @@
 
 ---
 
-## 🔄 이메일 자동화 플로우
+## 이메일 자동화 플로우
 
 ```
 [소싱 이메일 발송]
@@ -76,7 +76,7 @@
 
 ---
 
-## 🗂 프로젝트 구조
+## 프로젝트 구조
 
 ```
 ├── backend/
@@ -112,25 +112,25 @@
 
 ---
 
-## ⚙️ 환경변수
+## 환경변수
 
 ### Backend (Railway)
 
 | 변수 | 설명 | 필수 |
 |------|------|------|
-| `GEMINI_API_KEY` | Gemini API 키 (AI 분석) | ✅ |
-| `BREVO_API_KEY` | Brevo 이메일 발송 API 키 | ✅ |
-| `IMAP_USER` | Gmail 수신 계정 | ✅ |
-| `IMAP_PASSWORD` | Gmail 앱 비밀번호 (16자리) | ✅ |
-| `FROM_EMAIL` | 발신 이메일 주소 | ✅ |
-| `REPLY_TO_EMAIL` | 답장 수신 주소 | ✅ |
-| `SUPABASE_URL` | Supabase 프로젝트 URL | ✅ |
-| `SUPABASE_KEY` | Supabase service_role 키 | ✅ |
-| `TEST_EMAIL_OVERRIDE` | 테스트용 수신 주소 (설정 시 모든 메일이 여기로) | ⬜ |
+| `GEMINI_API_KEY` | Gemini API 키 (AI 분석) | O |
+| `BREVO_API_KEY` | Brevo 이메일 발송 API 키 | O |
+| `IMAP_USER` | Gmail 수신 계정 | O |
+| `IMAP_PASSWORD` | Gmail 앱 비밀번호 (16자리) | O |
+| `FROM_EMAIL` | 발신 이메일 주소 | O |
+| `REPLY_TO_EMAIL` | 답장 수신 주소 | O |
+| `SUPABASE_URL` | Supabase 프로젝트 URL | O |
+| `SUPABASE_KEY` | Supabase service_role 키 | O |
+| `TEST_EMAIL_OVERRIDE` | 테스트용 수신 주소 (설정 시 모든 메일이 여기로) | 선택 |
 
 ---
 
-## 🚀 로컬 실행
+## 로컬 실행
 
 ```bash
 # Backend
@@ -147,7 +147,7 @@ npm run dev
 
 ---
 
-## 🗄 Supabase 스키마
+## Supabase 스키마
 
 `backend/supabase_schema.sql` 전체를 Supabase SQL Editor에서 실행하세요.
 
@@ -157,7 +157,7 @@ npm run dev
 
 ---
 
-## 🛠 기술 스택
+## 기술 스택
 
 | 영역 | 기술 |
 |------|------|
