@@ -43,8 +43,11 @@ class Settings(BaseSettings):
     FROM_EMAIL: str = ""
     REPLY_TO_EMAIL: str = ""          # 답장 수신 이메일 (본인 Gmail 등)
     TEST_EMAIL_OVERRIDE: str = ""     # 설정 시 모든 발송을 이 주소로 리디렉션 (테스트용)
-    IMAP_USER: str = ""               # Gmail 수신 계정 (h4emin@gmail.com)
-    IMAP_PASSWORD: str = ""           # Gmail 앱 비밀번호 (16자리)
+    IMAP_USER: str = ""               # Gmail 수신 계정 (레거시, 미사용)
+    IMAP_PASSWORD: str = ""           # Gmail 앱 비밀번호 (레거시, 미사용)
+    GMAIL_CLIENT_ID: str = ""
+    GMAIL_CLIENT_SECRET: str = ""
+    GMAIL_REFRESH_TOKEN: str = ""
 
     # Deduplication
     DEDUP_SIMILARITY_THRESHOLD: float = 0.82

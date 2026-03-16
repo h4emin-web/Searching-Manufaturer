@@ -1,33 +1,24 @@
 """
-Gmail IMAP 수신 서비스
+Gmail API 수신 서비스 (OAuth2 - Railway 호환)
 - 5분마다 받은메일함 폴링
 - 우리가 보낸 메일의 답장 감지 (In-Reply-To 헤더 매칭)
-- 답장 본문 파싱 후 thread_store에 전달
 """
-import imaplib
-import email
 import asyncio
-import quopri
+import base64
+import email
 from email.header import decode_header
 from email.utils import parseaddr
 import structlog
+import httpx
 
 from ..config import get_settings
 
 logger = structlog.get_logger()
 settings = get_settings()
 
-IMAP_HOST = "imap.gmail.com"
-IMAP_PORT = 993
-POLL_INTERVAL = 300  # 5분
-
-
-def _decode_str(value: str | bytes | None) -> str:
-    if value is None:
-        return ""
-    if isinstance(value, bytes):
-        return value.decode("utf-8", errors="replace")
-    return value
+POLL_INTERVAL = 300
+GMAIL_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1/users/me"
 
 
 def _decode_header_value(raw: str) -> str:
@@ -42,7 +33,6 @@ def _decode_header_value(raw: str) -> str:
 
 
 def _extract_body(msg: email.message.Message) -> str:
-    """이메일에서 텍스트 본문 추출"""
     body = ""
     if msg.is_multipart():
         for part in msg.walk():
@@ -61,46 +51,62 @@ def _extract_body(msg: email.message.Message) -> str:
     return body.strip()
 
 
-def _fetch_replies_sync() -> list[dict]:
-    """
-    동기 IMAP 조회 (asyncio executor에서 실행)
-    Returns: [{"in_reply_to", "references", "from_email", "subject", "body"}]
-    """
+async def _get_access_token(client: httpx.AsyncClient) -> str | None:
+    if not all([settings.GMAIL_CLIENT_ID, settings.GMAIL_CLIENT_SECRET, settings.GMAIL_REFRESH_TOKEN]):
+        logger.error("gmail_oauth_missing", msg="GMAIL_CLIENT_ID/SECRET/REFRESH_TOKEN 필요")
+        return None
+    resp = await client.post(GMAIL_TOKEN_URL, data={
+        "client_id": settings.GMAIL_CLIENT_ID,
+        "client_secret": settings.GMAIL_CLIENT_SECRET,
+        "refresh_token": settings.GMAIL_REFRESH_TOKEN,
+        "grant_type": "refresh_token",
+    })
+    if resp.is_success:
+        return resp.json().get("access_token")
+    logger.error("gmail_token_failed", status=resp.status_code, body=resp.text[:200])
+    return None
+
+
+async def _fetch_replies_gmail() -> list[dict]:
     replies = []
     try:
-        imap_user = settings.IMAP_USER or settings.SMTP_USER
-        imap_pass = settings.IMAP_PASSWORD or settings.SMTP_PASSWORD
-        if not imap_user or not imap_pass:
-            return []
-        with imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT) as imap:
-            imap.login(imap_user, imap_pass)
-            imap.select("INBOX")
-
-            # 안 읽은 메일 중 답장(In-Reply-To 헤더 있는 것)만 검색
-            _, msg_nums = imap.search(None, "UNSEEN")
-            if not msg_nums or not msg_nums[0]:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            access_token = await _get_access_token(client)
+            if not access_token:
                 return []
-
-            for num in msg_nums[0].split():
-                _, data = imap.fetch(num, "(RFC822)")
-                if not data or not data[0]:
+            headers = {"Authorization": "Bearer " + access_token}
+            list_resp = await client.get(
+                GMAIL_API_BASE + "/messages",
+                headers=headers,
+                params={"q": "is:unread", "maxResults": 50},
+            )
+            if not list_resp.is_success:
+                logger.error("gmail_list_failed", status=list_resp.status_code)
+                return []
+            messages = list_resp.json().get("messages", [])
+            if not messages:
+                return []
+            msg_ids_to_mark = []
+            for msg_ref in messages:
+                msg_id = msg_ref["id"]
+                msg_resp = await client.get(
+                    GMAIL_API_BASE + "/messages/" + msg_id,
+                    headers=headers,
+                    params={"format": "raw"},
+                )
+                if not msg_resp.is_success:
                     continue
-
-                raw = data[0][1]
-                msg = email.message_from_bytes(raw)
-
+                raw_b64 = msg_resp.json().get("raw", "")
+                raw_bytes = base64.urlsafe_b64decode(raw_b64 + "==")
+                msg = email.message_from_bytes(raw_bytes)
                 in_reply_to = msg.get("In-Reply-To", "").strip()
                 references = msg.get("References", "").strip()
-
-                # In-Reply-To가 없으면 우리 메일에 대한 답장이 아님
                 if not in_reply_to:
                     continue
-
                 from_raw = msg.get("From", "")
                 _, from_email = parseaddr(from_raw)
                 subject = _decode_header_value(msg.get("Subject", ""))
                 body = _extract_body(msg)
-
                 replies.append({
                     "in_reply_to": in_reply_to,
                     "references": references,
@@ -108,29 +114,25 @@ def _fetch_replies_sync() -> list[dict]:
                     "subject": subject,
                     "body": body,
                 })
-
-                # 읽음 처리
-                imap.store(num, "+FLAGS", "\\Seen")
-
-        logger.info("imap_poll_done", found_replies=len(replies))
+                msg_ids_to_mark.append(msg_id)
+            for msg_id in msg_ids_to_mark:
+                await client.post(
+                    GMAIL_API_BASE + "/messages/" + msg_id + "/modify",
+                    headers=headers,
+                    json={"removeLabelIds": ["UNREAD"]},
+                )
+        logger.info("gmail_poll_done", found_replies=len(replies))
     except Exception as exc:
-        logger.error("imap_poll_failed", error=str(exc))
-
+        logger.error("gmail_poll_failed", error=str(exc))
     return replies
 
 
 async def fetch_replies() -> list[dict]:
-    """비동기 래퍼 - blocking IMAP을 executor에서 실행"""
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, _fetch_replies_sync)
+    return await _fetch_replies_gmail()
 
 
 async def start_polling(on_reply_callback):
-    """
-    백그라운드 폴링 루프
-    on_reply_callback(reply_dict) 호출로 답장 처리 위임
-    """
-    logger.info("email_poller_started", interval_seconds=POLL_INTERVAL)
+    logger.info("email_poller_started", interval_seconds=POLL_INTERVAL, method="gmail_api")
     while True:
         try:
             replies = await fetch_replies()
