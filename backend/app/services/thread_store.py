@@ -21,7 +21,7 @@ class EmailThread:
     subject: str
     country: str = ""
     auto_reply_count: int = 0
-    max_auto_replies: int = 3
+    max_auto_replies: int = 999
     follow_up_count: int = 0
     has_reply: bool = False
     last_sent_at: str = ""
@@ -107,7 +107,8 @@ class ThreadStore:
         self._bg(self._update_thread(thread))
 
     def can_auto_reply(self, thread: EmailThread) -> bool:
-        return thread.auto_reply_count < thread.max_auto_replies
+        # 완료 상태가 아닌 한 계속 자동 답변
+        return thread.status not in ("completed", "closed", "escalated")
 
     def can_follow_up(self, thread: EmailThread) -> bool:
         return not thread.has_reply and thread.follow_up_count < 2
@@ -152,7 +153,7 @@ class ThreadStore:
             subject=row["subject"],
             country=row.get("country", ""),
             auto_reply_count=row.get("auto_reply_count", 0),
-            max_auto_replies=row.get("max_auto_replies", 3),
+            max_auto_replies=row.get("max_auto_replies", 999),
             follow_up_count=row.get("follow_up_count", 0),
             has_reply=row.get("has_reply", False),
             last_sent_at=row.get("last_sent_at", ""),
