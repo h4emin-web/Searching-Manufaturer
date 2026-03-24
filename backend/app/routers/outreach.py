@@ -17,8 +17,45 @@ router = APIRouter()
 _plans: dict[str, OutreachPlan] = {}
 _plan_manufacturers: dict[str, dict[str, Manufacturer]] = {}
 
-# 새 심플 아웃리치 플랜 저장소
-_simple_plans: dict[str, dict] = {}  # plan_id → {status, items: [...]}
+# 심플 플랜 - 메모리 캐시 (Supabase 가 primary)
+_simple_plans: dict[str, dict] = {}
+
+
+async def _load_plan(plan_id: str) -> dict | None:
+    """메모리에 없으면 Supabase에서 로드"""
+    if plan_id in _simple_plans:
+        return _simple_plans[plan_id]
+    from ..db import get_supabase
+    db = get_supabase()
+    if not db:
+        return None
+    try:
+        rows = await db.select("simple_plans", {"plan_id": plan_id})
+        if rows:
+            _simple_plans[plan_id] = rows[0]
+            return _simple_plans[plan_id]
+    except Exception as exc:
+        logger.warning("plan_load_failed", plan_id=plan_id, error=str(exc))
+    return None
+
+
+async def _save_plan(plan_id: str) -> None:
+    """메모리 플랜을 Supabase에 저장"""
+    plan = _simple_plans.get(plan_id)
+    if not plan:
+        return
+    from ..db import get_supabase
+    db = get_supabase()
+    if not db:
+        return
+    try:
+        await db.upsert("simple_plans", {
+            "plan_id": plan_id,
+            "status": plan.get("status", "running"),
+            "items": plan.get("items", []),
+        })
+    except Exception as exc:
+        logger.warning("plan_save_failed", plan_id=plan_id, error=str(exc))
 
 
 class SimpleManufacturer(BaseModel):
@@ -57,12 +94,13 @@ async def simple_start_outreach(req: SimpleOutreachRequest, background_tasks: Ba
     ]
     _simple_plans[plan_id] = {"status": "running", "items": items}
     background_tasks.add_task(_run_simple_outreach, plan_id, req)
+    asyncio.create_task(_save_plan(plan_id))
     return {"plan_id": plan_id, "total": len(items)}
 
 
 @router.get("/simple-plans/{plan_id}")
 async def get_simple_plan(plan_id: str):
-    plan = _simple_plans.get(plan_id)
+    plan = await _load_plan(plan_id)
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
     return plan
@@ -71,7 +109,7 @@ async def get_simple_plan(plan_id: str):
 @router.get("/simple-plans/{plan_id}/threads")
 async def get_plan_threads(plan_id: str):
     """플랜별 이메일 스레드 대화 내용 조회"""
-    plan = _simple_plans.get(plan_id)
+    plan = await _load_plan(plan_id)
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
 
@@ -217,6 +255,7 @@ async def _process_one_manufacturer(plan_id: str, idx: int, item: dict, req: Sim
         items[idx]["contact_method"] = "webform"
         items[idx]["web_form_url"] = web_form or item["website"]
         logger.info("outreach_webform", manufacturer=item["name"], url=web_form)
+    await _save_plan(plan_id)
 
 
 async def _run_simple_outreach(plan_id: str, req: SimpleOutreachRequest):
@@ -236,6 +275,7 @@ async def _run_simple_outreach(plan_id: str, req: SimpleOutreachRequest):
     await asyncio.gather(*[_with_limit(i, item) for i, item in enumerate(items)])
     plan["status"] = "completed"
     logger.info("simple_outreach_complete", plan_id=plan_id, total=len(items))
+    await _save_plan(plan_id)
 
 
 class CreatePlanRequest(BaseModel):
