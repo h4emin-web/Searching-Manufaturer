@@ -21,7 +21,8 @@ async def _send_via_brevo(
     message_id: str,
     in_reply_to: str | None,
     reply_to: str | None,
-) -> tuple[bool, str | None]:
+) -> tuple[bool, str | None, str]:
+    """Returns (success, error, actual_message_id)"""
     payload: dict = {
         "sender": {"email": from_email},
         "to": [{"email": to_email}],
@@ -30,12 +31,12 @@ async def _send_via_brevo(
     }
     if reply_to:
         payload["replyTo"] = {"email": reply_to}
-    headers: dict[str, str] = {"Message-ID": message_id}
+    extra_headers: dict[str, str] = {}
     if in_reply_to:
-        headers["In-Reply-To"] = in_reply_to
-        headers["References"] = in_reply_to
-    if headers:
-        payload["headers"] = headers
+        extra_headers["In-Reply-To"] = in_reply_to
+        extra_headers["References"] = in_reply_to
+    if extra_headers:
+        payload["headers"] = extra_headers
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
@@ -44,10 +45,12 @@ async def _send_via_brevo(
                 json=payload,
             )
         if resp.is_success:
-            return True, None
-        return False, f"Brevo {resp.status_code}: {resp.text[:300]}"
+            # Brevo가 실제로 부여한 Message-ID 사용
+            brevo_message_id = resp.json().get("messageId", message_id)
+            return True, None, brevo_message_id
+        return False, f"Brevo {resp.status_code}: {resp.text[:300]}", message_id
     except Exception as exc:
-        return False, str(exc)
+        return False, str(exc), message_id
 
 
 async def _send_via_smtp(
@@ -118,7 +121,7 @@ async def send_outreach_email(
         logger.info("email_test_override", original_to=to_email, override_to=actual_to)
 
     if settings.BREVO_API_KEY:
-        success, error = await _send_via_brevo(
+        success, error, final_message_id = await _send_via_brevo(
             actual_to, from_email, subject, full_body, final_message_id, in_reply_to, reply_to
         )
         method = "brevo"
@@ -131,7 +134,7 @@ async def send_outreach_email(
         return False, "이메일 발송 설정 없음 (BREVO_API_KEY 또는 SMTP_USER/PASSWORD 필요)"
 
     if success:
-        logger.info("email_sent", method=method, to=to_email, manufacturer=manufacturer_name)
+        logger.info("email_sent", method=method, to=to_email, manufacturer=manufacturer_name, message_id=final_message_id)
         if register_thread and not in_reply_to and ingredient:
             from .thread_store import thread_store
             thread_store.register(
