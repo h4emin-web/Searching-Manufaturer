@@ -62,29 +62,43 @@ async def generate_initial_email(
         "",
         "Manufacturer: " + manufacturer_name + " (" + manufacturer_country + ")",
         "Ingredient: " + ingredient,
-        "Use case: " + use_case,
-        "Required certifications: " + req_str,
         "Language: " + language,
-        "Requester: " + requester_name + " (Korean pharmaceutical company)",
-    ]
-    if notes_clean:
-        prompt_lines.append("Additional context: " + notes_clean)
-
-    prompt_lines += [
         "",
-        "IMPORTANT rules:",
-        "- Do NOT include end-user or client company name anywhere in subject or body",
-        "- Do NOT write phrases like 'due to internal policy' or 'cannot disclose client'",
-        "- Do NOT use any placeholder text like [Your Name] or [Company]",
-        "- Subject line must only reference the ingredient, not any company name",
-        "- Sign off with exactly \"" + requester_name + "\" as the name",
+        "Use EXACTLY this structure and tone:",
+        "---",
+        "Subject: [Acebiopharm] Product inquiry_" + ingredient,
         "",
-        "Write the email in " + language + ".",
-        "Include: intro as Korean pharma company, product availability, COA/GMP certs,",
-        "pricing (CIF Busan port), free sample request.",
+        "Dear Sir/Madam,",
+        "Good day",
+        "",
+        "My name is Mason from Acebiopharm, a leading distributor dealing with pharmaceutical materials, food and cosmetics from South Korea.",
+        "",
+        "It's a huge pleasure to contact you for the first time.",
+        "Currently we are looking for \"" + ingredient + "\" which we surveyed that it is being produced by your company.",
+        "",
+        "In order to proceed the importing review process, we would like to kindly request the following information for our reference:",
+        "",
+        "1. Pricing for MOQ based on CIF term",
+        "2. WHO-GMP, SMF certificate (or COPP)",
+        "3. Latest Certificate of Analysis (COA)",
+        "4. Packing unit",
+        "5. Estimated lead time",
+        "6. Possibility of receiving samples for evaluation",
+        "",
+        "We hope this will be the start of a mutually beneficial relationship.",
+        "If you have any inquiries about us, please feel free to reach out!",
+        "I look forward to your reply.",
+        "",
+        "Thank you.",
+        "Have a nice day!",
+        "Best regards, Mason",
+        "---",
+        "",
+        "If language is not English, translate the body naturally into " + language + " while keeping the same structure.",
+        "The subject must always be in English: [Acebiopharm] Product inquiry_" + ingredient,
         "",
         "Return ONLY valid JSON:",
-        "{\"subject\": \"...\", \"body\": \"...\"}",
+        "{\"subject\": \"[Acebiopharm] Product inquiry_" + ingredient + "\", \"body\": \"...\"}",
     ]
     prompt = "\n".join(prompt_lines)
 
@@ -121,19 +135,25 @@ async def generate_initial_email(
 
 
 def _fallback_email(manufacturer_name: str, ingredient: str, requester_name: str) -> tuple[str, str]:
-    subject = "Sourcing Inquiry: " + ingredient
+    subject = "[Acebiopharm] Product inquiry_" + ingredient
     body = (
-        "Dear " + manufacturer_name + " Team,\n\n"
-        "I hope this message finds you well. My name is " + requester_name + ", "
-        "representing a Korean pharmaceutical company.\n\n"
-        "We are currently sourcing " + ingredient + " and would like to inquire about "
-        "your products and capabilities.\n\n"
-        "Could you please provide:\n"
-        "1. Product specifications and Certificate of Analysis (COA)\n"
-        "2. GMP / regulatory certifications\n"
-        "3. Pricing (CIF Busan Port, South Korea)\n"
-        "4. Availability of a free sample\n\n"
-        "We look forward to the possibility of establishing a business relationship.\n\n"
-        "Best regards,\n" + requester_name
+        "Dear Sir/Madam,\n"
+        "Good day\n\n"
+        "My name is Mason from Acebiopharm, a leading distributor dealing with pharmaceutical materials, food and cosmetics from South Korea.\n\n"
+        "It's a huge pleasure to contact you for the first time.\n"
+        "Currently we are looking for \"" + ingredient + "\" which we surveyed that it is being produced by your company.\n\n"
+        "In order to proceed the importing review process, we would like to kindly request the following information for our reference:\n\n"
+        "1. Pricing for MOQ based on CIF term\n"
+        "2. WHO-GMP, SMF certificate (or COPP)\n"
+        "3. Latest Certificate of Analysis (COA)\n"
+        "4. Packing unit\n"
+        "5. Estimated lead time\n"
+        "6. Possibility of receiving samples for evaluation\n\n"
+        "We hope this will be the start of a mutually beneficial relationship.\n"
+        "If you have any inquiries about us, please feel free to reach out!\n"
+        "I look forward to your reply.\n\n"
+        "Thank you.\n"
+        "Have a nice day!\n"
+        "Best regards, Mason"
     )
     return subject, body
