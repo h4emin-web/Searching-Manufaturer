@@ -107,8 +107,8 @@ class ThreadStore:
         self._bg(self._update_thread(thread))
 
     def can_auto_reply(self, thread: EmailThread) -> bool:
-        # 완료 상태가 아닌 한 계속 자동 답변
-        return thread.status not in ("completed", "closed", "escalated")
+        # auto_reply_count가 max_auto_replies 미만이면 계속 자동 답변
+        return thread.auto_reply_count < thread.max_auto_replies
 
     def can_follow_up(self, thread: EmailThread) -> bool:
         return not thread.has_reply and thread.follow_up_count < 2
