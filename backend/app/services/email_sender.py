@@ -1,16 +1,53 @@
 """
-이메일 발송 서비스 - 네이버 SMTP 전용
-- smtp.naver.com:587 (STARTTLS)
+이메일 발송 서비스
+- Brevo API (기본, HTTPS - 클라우드 서버 포트 차단 우회)
+- 네이버 SMTP (로컬 fallback)
 """
-from email.message import EmailMessage
 from email.utils import make_msgid
-from email.policy import SMTP as SMTP_POLICY
 import structlog
+import httpx
 
 from ..config import get_settings
 
 logger = structlog.get_logger()
 settings = get_settings()
+
+
+async def _send_via_brevo(
+    to_email: str,
+    from_email: str,
+    subject: str,
+    body: str,
+    message_id: str,
+    in_reply_to: str | None,
+    reply_to: str | None,
+) -> tuple[bool, str | None]:
+    payload: dict = {
+        "sender": {"email": from_email},
+        "to": [{"email": to_email}],
+        "subject": subject,
+        "textContent": body,
+    }
+    if reply_to:
+        payload["replyTo"] = {"email": reply_to}
+    headers: dict[str, str] = {"Message-ID": message_id}
+    if in_reply_to:
+        headers["In-Reply-To"] = in_reply_to
+        headers["References"] = in_reply_to
+    if headers:
+        payload["headers"] = headers
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                "https://api.brevo.com/v3/smtp/email",
+                headers={"api-key": settings.BREVO_API_KEY, "Content-Type": "application/json"},
+                json=payload,
+            )
+        if resp.is_success:
+            return True, None
+        return False, f"Brevo {resp.status_code}: {resp.text[:300]}"
+    except Exception as exc:
+        return False, str(exc)
 
 
 async def _send_via_smtp(
@@ -22,6 +59,8 @@ async def _send_via_smtp(
     in_reply_to: str | None,
 ) -> tuple[bool, str | None]:
     import aiosmtplib
+    from email.message import EmailMessage
+    from email.policy import SMTP as SMTP_POLICY
     msg = EmailMessage(policy=SMTP_POLICY)
     msg["Subject"]    = subject
     msg["From"]       = from_email
@@ -31,7 +70,6 @@ async def _send_via_smtp(
         msg["In-Reply-To"] = in_reply_to
         msg["References"]  = in_reply_to
     msg.set_content(body, charset="utf-8")
-
     try:
         await aiosmtplib.send(
             msg.as_bytes(),
@@ -63,11 +101,9 @@ async def send_outreach_email(
     plan_id: str = "",
     manufacturer_id: str = "",
 ) -> tuple[bool, str | None]:
-    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
-        return False, "이메일 발송 설정 없음 (SMTP_USER / SMTP_PASSWORD 필요)"
-
     final_message_id = message_id or make_msgid(domain="naver.com")
     from_email = settings.FROM_EMAIL or settings.SMTP_USER
+    reply_to = settings.REPLY_TO_EMAIL or from_email
 
     parts = [p for p in [
         body_en,
@@ -81,12 +117,21 @@ async def send_outreach_email(
         subject = f"[TEST→{to_email}] {subject}"
         logger.info("email_test_override", original_to=to_email, override_to=actual_to)
 
-    success, error = await _send_via_smtp(
-        actual_to, from_email, subject, full_body, final_message_id, in_reply_to
-    )
+    if settings.BREVO_API_KEY:
+        success, error = await _send_via_brevo(
+            actual_to, from_email, subject, full_body, final_message_id, in_reply_to, reply_to
+        )
+        method = "brevo"
+    elif settings.SMTP_USER and settings.SMTP_PASSWORD:
+        success, error = await _send_via_smtp(
+            actual_to, from_email, subject, full_body, final_message_id, in_reply_to
+        )
+        method = "naver_smtp"
+    else:
+        return False, "이메일 발송 설정 없음 (BREVO_API_KEY 또는 SMTP_USER/PASSWORD 필요)"
 
     if success:
-        logger.info("email_sent", method="naver_smtp", to=to_email, manufacturer=manufacturer_name)
+        logger.info("email_sent", method=method, to=to_email, manufacturer=manufacturer_name)
         if register_thread and not in_reply_to and ingredient:
             from .thread_store import thread_store
             thread_store.register(
@@ -101,6 +146,6 @@ async def send_outreach_email(
                 manufacturer_id=manufacturer_id,
             )
     else:
-        logger.error("email_failed", method="naver_smtp", to=to_email, error=error)
+        logger.error("email_failed", method=method, to=to_email, error=error)
 
     return success, error

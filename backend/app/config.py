@@ -33,7 +33,9 @@ class Settings(BaseSettings):
     OLLAMA_QWEN_MODEL: str = "qwen2.5:7b"
     OLLAMA_GPT_MODEL: str = "llama3.2"
 
-    # Communication - 네이버 SMTP/IMAP
+    # Communication
+    BREVO_API_KEY: str = ""           # Brevo API (발송용, HTTPS - 클라우드 서버 권장)
+    # 네이버 IMAP (수신용)
     SMTP_HOST: str = "smtp.naver.com"
     SMTP_PORT: int = 587
     SMTP_USER: str = ""               # 네이버 아이디@naver.com
