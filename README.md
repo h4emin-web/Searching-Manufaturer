@@ -1,46 +1,69 @@
-# Pharma Manufacturer Sourcing Agent
+# Acebiopharm Pharma Sourcing Agent
 
-의약품 원료 제조원을 AI로 탐색하고, 소싱 이메일 발송부터 답변 분석 · 자동 재질문 · 리마인더까지 자동화하는 풀스택 시스템입니다.
+AI 기반 의약품 원료 제조사 자동 소싱 시스템
+제조사 탐색 → 이메일 자동 발송 → 답장 분석 → Follow-up까지 전 과정 자동화
+
+🌐 **Live:** https://searching-manufaturer.vercel.app
+
+---
+
+## 기술 스택
+
+| 영역 | 기술 |
+|------|------|
+| **Frontend** | React 18, TypeScript, Vite, Tailwind CSS |
+| **Backend** | FastAPI, Python 3.12 |
+| **AI** | Google Gemini 2.0 Flash |
+| **이메일 발송** | Brevo API (HTTPS, 클라우드 포트 차단 우회) |
+| **이메일 수신** | 네이버 IMAP (imap.naver.com:993) |
+| **데이터베이스** | Supabase (PostgreSQL) |
+| **프론트 배포** | Vercel |
+| **백엔드 배포** | Render (Docker) |
 
 ---
 
 ## 전체 아키텍처
 
 ```
-사용자 (Frontend)
-      |
-      |  소싱 요청 (원료명 / 용도 / 지역)
-      v
-+-------------------------------------------------------+
-|   Backend API  (FastAPI / Railway)                    |
-|                                                       |
-|   +-------------------+   +--------------------+      |
-|   | Sourcing Agent    |   | Outreach Router    |      |
-|   | (Gemini AI)       |   |                    |      |
-|   +---------+---------+   +---------+----------+      |
-|             |                         |               |
-|             +------------+------------+               |
-|                          |                            |
-|   +--------------------------------------------+      |
-|   |  Email Sender  (Brevo)                     |      |
-|   |  Message-ID / In-Reply-To 헤더 포함         |      |
-|   +----------------------+---------------------+      |
-|                          |                            |
-|   +--------------------------------------------+      |
-|   |  Thread Store                              |      |
-|   |  인메모리 + Supabase 영구 저장              |      |
-|   +----------------------+---------------------+      |
-|                          |                            |
-|   +--------------------------------------------+      |
-|   |  백그라운드 루프  (2개 병렬)                 |      |
-|   |  1. Email Receiver  (IMAP 5분 폴링)         |      |
-|   |  2. Followup Scheduler  (30분 체크)         |      |
-|   +--------------------------------------------+      |
-+-------------------------------------------------------+
-      |                          |
-      v                          v
- Gmail IMAP                  Supabase
- (수신 감시)               (스레드 상태 저장)
+┌─────────────────────────────────────────────────────────┐
+│                   Frontend (Vercel)                     │
+│           React + TypeScript + Tailwind CSS             │
+│    소싱 마법사 UI / 요청 현황 / 대시보드                  │
+└────────────────────────┬────────────────────────────────┘
+                         │ VITE_API_URL
+                         ▼
+┌─────────────────────────────────────────────────────────┐
+│                  Backend (Render)                       │
+│                FastAPI / Python 3.12                    │
+│                                                         │
+│  ┌──────────────────┐      ┌───────────────────────┐    │
+│  │  Sourcing Agent  │      │   Outreach Router     │    │
+│  │  (Gemini AI)     │─────►│   이메일 생성 & 발송   │    │
+│  └──────────────────┘      └──────────┬────────────┘    │
+│                                       │                 │
+│  ┌────────────────────────────────────▼──────────────┐  │
+│  │              Thread Store                         │  │
+│  │        인메모리 + Supabase 영구 저장               │  │
+│  └────────────────────────────────────┬──────────────┘  │
+│                                       │                 │
+│  ┌────────────────────────────────────▼──────────────┐  │
+│  │           백그라운드 루프 (상시 실행)               │  │
+│  │   · 네이버 IMAP 폴링 (10초 간격)                   │  │
+│  │   · Follow-up 스케줄러 (30분 체크)                 │  │
+│  └───────────────────────────────────────────────────┘  │
+└───────────────┬──────────────────────┬──────────────────┘
+                │                      │
+                ▼                      ▼
+    ┌───────────────────┐   ┌─────────────────────┐
+    │   Brevo API       │   │  네이버 IMAP         │
+    │   (메일 발송)      │   │  (답장 수신)         │
+    └───────────────────┘   └─────────────────────┘
+                                       │
+                                       ▼
+                            ┌─────────────────────┐
+                            │  Supabase           │
+                            │  (스레드 기록 저장)  │
+                            └─────────────────────┘
 ```
 
 ---
@@ -48,31 +71,52 @@
 ## 이메일 자동화 플로우
 
 ```
-[소싱 이메일 발송]
-       │
-       ├──── 24시간 후 무응답 ────► [리마인더 발송] (최대 2회)
-       │
-       └──── 답장 수신 (IMAP 폴링)
-                    │
-                    ▼
-             [Gemini AI 분석]
-                    │
-         ┌──────────┼──────────┐
-         ▼          ▼          ▼
-    모든 항목    일부 항목    제조원이
-    답변 완료   누락 답변    질문을 함
-         │          │            │
-         ▼          ▼       ┌────┴────┐
-      [완료]   [누락 항목만  명확한  애매한
-              재질문 발송]  질문    질문
-                            │       │
-                            ▼       ▼
-                         [자동     [담당자
-                         답변]     검토 요청]
-                                    │
-                                    ▼
-                              [승인 후 발송]
-``` 
+[Brevo → 초기 소싱 메일 발송]
+         │
+         ├── 24시간 무응답 ──► [리마인더 발송] (최대 2회)
+         │
+         └── 네이버 IMAP에 답장 수신
+                  │
+                  ▼
+          [Gemini AI 답장 분석]
+                  │
+      ┌───────────┼───────────┐
+      ▼           ▼           ▼
+  모든 항목    일부 항목    제조사가
+  답변 완료   누락 답변    질문을 함
+      │           │           │
+      ▼           ▼           ▼
+   [완료]   [누락 항목만  [자동 답변
+            재질문 발송]   또는 검토]
+```
+
+---
+
+## 발송 이메일 형식
+
+```
+제목: [Acebiopharm] Product inquiry_[원료명]
+
+Dear Sir/Madam,
+Good day
+
+My name is Mason from Acebiopharm, a leading distributor
+dealing with pharmaceutical materials, food and cosmetics
+from South Korea.
+
+Currently we are looking for "[원료명]"...
+
+1. Pricing for MOQ based on CIF term
+2. WHO-GMP, SMF certificate (or COPP)
+3. Latest Certificate of Analysis (COA)
+4. Packing unit
+5. Estimated lead time
+6. Possibility of receiving samples for evaluation
+
+Best regards, Mason
+```
+
+> 중국·일본·유럽 등 제조사 국가에 따라 현지 언어로 자동 번역 발송
 
 ---
 
@@ -82,51 +126,59 @@
 ├── backend/
 │   ├── app/
 │   │   ├── agents/
-│   │   │   ├── sourcing_agent.py        # AI 제조원 탐색 (Gemini)
-│   │   │   ├── outreach_email_agent.py  # 초기 소싱 이메일 생성
+│   │   │   ├── sourcing_agent.py        # Gemini AI 제조사 탐색
+│   │   │   ├── outreach_email_agent.py  # 이메일 템플릿 생성
 │   │   │   └── reply_agent.py           # 답장 분석 + 재질문 생성
 │   │   ├── services/
-│   │   │   ├── email_sender.py          # Brevo API 발송 (헤더 포함)
-│   │   │   ├── email_receiver.py        # Gmail IMAP 폴링 (5분)
+│   │   │   ├── email_sender.py          # Brevo API 발송
+│   │   │   ├── email_receiver.py        # 네이버 IMAP 폴링
 │   │   │   ├── reply_handler.py         # 답장 처리 오케스트레이터
-│   │   │   ├── followup_scheduler.py    # 24시간 리마인더 스케줄러
-│   │   │   └── thread_store.py          # 스레드 상태 관리 (DB 연동)
+│   │   │   ├── followup_scheduler.py    # 리마인더 스케줄러
+│   │   │   └── thread_store.py          # 스레드 상태 관리
 │   │   ├── routers/
 │   │   │   ├── outreach.py              # 소싱 발송 API
 │   │   │   ├── dashboard.py             # 현황 대시보드 API
-│   │   │   └── ...
+│   │   │   └── sessions.py              # 세션 관리
 │   │   ├── config.py
-│   │   ├── db.py                        # Supabase REST 클라이언트
-│   │   └── main.py                      # FastAPI 앱 진입점
-│   ├── supabase_schema.sql
+│   │   ├── db.py                        # Supabase 클라이언트
+│   │   └── main.py                      # FastAPI 진입점
 │   ├── requirements.txt
 │   └── Dockerfile
-└── frontend/
-    └── src/
-        ├── pages/
-        │   ├── Index.tsx                # 소싱 마법사 (단계별 입력)
-        │   ├── MyRequests.tsx           # 내 요청 현황
-        │   └── AllRequests.tsx          # 전체 현황 (담당자 검토 포함)
-        └── components/sourcing/         # 단계별 UI 컴포넌트
+├── frontend/
+│   └── src/
+│       ├── pages/
+│       │   ├── Index.tsx                # 소싱 마법사 UI
+│       │   ├── MyRequests.tsx           # 내 요청 현황
+│       │   └── AllRequests.tsx          # 전체 현황
+│       └── components/sourcing/
+├── Dockerfile                           # Render 배포용 (루트)
+├── render.yaml                          # Render 배포 설정
+└── vercel.json                          # Vercel 배포 설정
 ```
 
 ---
 
 ## 환경변수
 
-### Backend (Railway)
+### Backend (Render)
 
 | 변수 | 설명 | 필수 |
 |------|------|------|
-| `GEMINI_API_KEY` | Gemini API 키 (AI 분석) | O |
-| `BREVO_API_KEY` | Brevo 이메일 발송 API 키 | O |
-| `IMAP_USER` | Gmail 수신 계정 | O |
-| `IMAP_PASSWORD` | Gmail 앱 비밀번호 (16자리) | O |
-| `FROM_EMAIL` | 발신 이메일 주소 | O |
-| `REPLY_TO_EMAIL` | 답장 수신 주소 | O |
-| `SUPABASE_URL` | Supabase 프로젝트 URL | O |
-| `SUPABASE_KEY` | Supabase service_role 키 | O |
-| `TEST_EMAIL_OVERRIDE` | 테스트용 수신 주소 (설정 시 모든 메일이 여기로) | 선택 |
+| `GEMINI_API_KEY` | Gemini API 키 | ✅ |
+| `BREVO_API_KEY` | Brevo 이메일 발송 API 키 | ✅ |
+| `FROM_EMAIL` | 발신 이메일 (Brevo 인증된 주소) | ✅ |
+| `REPLY_TO_EMAIL` | 답장 수신 이메일 (네이버) | ✅ |
+| `IMAP_USER` | 네이버 이메일 | ✅ |
+| `IMAP_PASSWORD` | 네이버 앱 비밀번호 | ✅ |
+| `SUPABASE_URL` | Supabase 프로젝트 URL | ✅ |
+| `SUPABASE_KEY` | Supabase service_role 키 | ✅ |
+| `TEST_EMAIL_OVERRIDE` | 테스트용 수신 주소 | 선택 |
+
+### Frontend (Vercel)
+
+| 변수 | 설명 |
+|------|------|
+| `VITE_API_URL` | 백엔드 URL + `/api/v1` |
 
 ---
 
@@ -149,22 +201,8 @@ npm run dev
 
 ## Supabase 스키마
 
-`backend/supabase_schema.sql` 전체를 Supabase SQL Editor에서 실행하세요.
+`backend/supabase_schema.sql`을 Supabase SQL Editor에서 실행
 
 주요 테이블:
-- `email_threads` — 이메일 스레드 상태 (follow_up_count, has_reply, last_sent_at 포함)
+- `email_threads` — 이메일 스레드 상태 (follow_up_count, has_reply 등)
 - `thread_message_index` — Message-ID 역방향 인덱스 (In-Reply-To 매칭용)
-
----
-
-## 기술 스택
-
-| 영역 | 기술 |
-|------|------|
-| Backend | FastAPI, Python 3.12 |
-| AI | Google Gemini |
-| 이메일 발송 | Brevo API |
-| 이메일 수신 | Gmail IMAP |
-| DB | Supabase (PostgreSQL) |
-| 배포 | Railway (Docker) |
-| Frontend | React, TypeScript, Vite, Tailwind CSS |
