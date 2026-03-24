@@ -5,6 +5,7 @@
 - AI 판단 가능 → 자동 답장 발송
 - AI 판단 불가 → 에스컬레이션 (outreach plan 현황에 기재)
 """
+import asyncio
 from email.utils import make_msgid
 import structlog
 
@@ -88,7 +89,7 @@ async def handle_reply(reply: dict) -> None:
 
 
 def _update_plan_status(thread, status: str) -> None:
-    """outreach plan 아이템 상태 업데이트"""
+    """outreach plan 아이템 상태 업데이트 + Supabase 저장"""
     if not thread.plan_id or not thread.manufacturer_id:
         return
     plan = outreach_router._simple_plans.get(thread.plan_id)
@@ -98,10 +99,11 @@ def _update_plan_status(thread, status: str) -> None:
         if item["id"] == thread.manufacturer_id:
             item["status"] = status
             break
+    asyncio.create_task(outreach_router._save_plan(thread.plan_id))
 
 
 def _escalate_to_plan(thread, questions: list[str], missing: list[str]) -> None:
-    """outreach plan 아이템에 에스컬레이션 정보 기재"""
+    """outreach plan 아이템에 에스컬레이션 정보 기재 + Supabase 저장"""
     if not thread.plan_id or not thread.manufacturer_id:
         return
     plan = outreach_router._simple_plans.get(thread.plan_id)
@@ -113,3 +115,4 @@ def _escalate_to_plan(thread, questions: list[str], missing: list[str]) -> None:
             item["escalated_questions"] = questions
             item["missing_items"] = missing
             break
+    asyncio.create_task(outreach_router._save_plan(thread.plan_id))
