@@ -34,20 +34,18 @@ class Settings(BaseSettings):
     OLLAMA_GPT_MODEL: str = "llama3.2"
 
     # Communication
-    BREVO_API_KEY: str = ""           # Brevo (구 Sendinblue) API key (권장)
-    RESEND_API_KEY: str = ""          # Resend.com API key
-    SMTP_HOST: str = "smtp.gmail.com"
+    BREVO_API_KEY: str = ""           # Brevo API key (선택, 없으면 네이버 SMTP 사용)
+    SMTP_HOST: str = "smtp.naver.com"
     SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
-    FROM_EMAIL: str = ""
-    REPLY_TO_EMAIL: str = ""          # 답장 수신 이메일 (본인 Gmail 등)
+    SMTP_USER: str = ""               # 네이버 아이디@naver.com
+    SMTP_PASSWORD: str = ""           # 네이버 앱 비밀번호
+    FROM_EMAIL: str = ""              # 발신 이메일 (미설정 시 SMTP_USER 사용)
+    REPLY_TO_EMAIL: str = ""          # 답장 수신 이메일 (미설정 시 SMTP_USER 사용)
     TEST_EMAIL_OVERRIDE: str = ""     # 설정 시 모든 발송을 이 주소로 리디렉션 (테스트용)
-    IMAP_USER: str = ""               # Gmail 수신 계정 (레거시, 미사용)
-    IMAP_PASSWORD: str = ""           # Gmail 앱 비밀번호 (레거시, 미사용)
-    GMAIL_CLIENT_ID: str = ""
-    GMAIL_CLIENT_SECRET: str = ""
-    GMAIL_REFRESH_TOKEN: str = ""
+    IMAP_HOST: str = "imap.naver.com"
+    IMAP_PORT: int = 993
+    IMAP_USER: str = ""               # 네이버 아이디@naver.com (미설정 시 SMTP_USER 사용)
+    IMAP_PASSWORD: str = ""           # 네이버 앱 비밀번호 (미설정 시 SMTP_PASSWORD 사용)
 
     # Deduplication
     DEDUP_SIMILARITY_THRESHOLD: float = 0.82

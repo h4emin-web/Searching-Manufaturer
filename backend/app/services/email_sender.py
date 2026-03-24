@@ -1,7 +1,7 @@
 """
 이메일 발송 서비스
-- Brevo API (Railway 권장 - HTTPS, 포트 차단 없음)
-- aiosmtplib SMTP (로컬/서버에서 SMTP 허용 시 fallback)
+- 네이버 SMTP (기본) - smtp.naver.com:587
+- Brevo API (선택, BREVO_API_KEY 설정 시 우선 사용)
 """
 from email.message import EmailMessage
 from email.utils import make_msgid
@@ -130,7 +130,7 @@ async def send_outreach_email(
         subject = f"[TEST→{to_email}] {subject}"
         logger.info("email_test_override", original_to=to_email, override_to=actual_to)
 
-    # Brevo 우선, SMTP fallback
+    # 네이버 SMTP 기본, Brevo API는 설정 시 우선 사용
     if settings.BREVO_API_KEY:
         success, error = await _send_via_brevo(
             actual_to, from_email, subject, full_body,
@@ -141,9 +141,9 @@ async def send_outreach_email(
         method = "brevo"
     elif settings.SMTP_USER and settings.SMTP_PASSWORD:
         success, error = await _send_via_smtp(actual_to, from_email, subject, full_body, final_message_id, in_reply_to)
-        method = "smtp"
+        method = "naver_smtp"
     else:
-        return False, "이메일 발송 설정 없음 (BREVO_API_KEY 또는 SMTP 자격증명 필요)"
+        return False, "이메일 발송 설정 없음 (SMTP_USER / SMTP_PASSWORD 필요)"
 
     if success:
         logger.info("email_sent", method=method, to=to_email, manufacturer=manufacturer_name)
