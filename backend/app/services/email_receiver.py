@@ -15,7 +15,7 @@ from ..config import get_settings
 logger = structlog.get_logger()
 settings = get_settings()
 
-POLL_INTERVAL = 300
+POLL_INTERVAL = 10
 
 
 def _decode_header_value(raw: str) -> str:
