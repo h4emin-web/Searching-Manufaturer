@@ -93,8 +93,8 @@ async def simple_start_outreach(req: SimpleOutreachRequest, background_tasks: Ba
         for m in req.manufacturers
     ]
     _simple_plans[plan_id] = {"status": "running", "items": items}
+    background_tasks.add_task(_save_plan, plan_id)
     background_tasks.add_task(_run_simple_outreach, plan_id, req)
-    asyncio.create_task(_save_plan(plan_id))
     return {"plan_id": plan_id, "total": len(items)}
 
 
