@@ -103,6 +103,8 @@ async def send_outreach_email(
     register_thread: bool = True,
     plan_id: str = "",
     manufacturer_id: str = "",
+    end_user_disclosable: bool = True,
+    end_user_name: str = "",
 ) -> tuple[bool, str | None]:
     final_message_id = message_id or make_msgid(domain="naver.com")
     from_email = settings.FROM_EMAIL or settings.SMTP_USER
@@ -147,6 +149,8 @@ async def send_outreach_email(
                 country=country,
                 plan_id=plan_id,
                 manufacturer_id=manufacturer_id,
+                end_user_disclosable=end_user_disclosable,
+                end_user_name=end_user_name,
             )
     else:
         logger.error("email_failed", method=method, to=to_email, error=error)

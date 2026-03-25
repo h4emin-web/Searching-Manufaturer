@@ -78,12 +78,22 @@ async def analyze_and_reply(thread: EmailThread) -> dict:
     language = _get_language(thread.country)
     conversation = _build_conversation_text(thread)
 
+    end_user_info = ""
+    if thread.end_user_disclosable:
+        if thread.end_user_name:
+            end_user_info = f"End user CAN be disclosed. End user: {thread.end_user_name}"
+        else:
+            end_user_info = "End user CAN be disclosed."
+    else:
+        end_user_info = "End user CANNOT be disclosed. If manufacturer asks about end user, do NOT answer — flag as needs_human."
+
     prompt = f"""You are a pharmaceutical procurement specialist at a Korean pharma company.
 Analyze the latest manufacturer reply and generate an appropriate response.
 
 Ingredient: {thread.ingredient}
 Manufacturer: {thread.manufacturer_name} ({thread.country})
 Language to use in reply: {language}
+End user policy: {end_user_info}
 
 Required items we originally asked for:
 1. Product availability confirmation
@@ -96,24 +106,26 @@ Full conversation:
 
 Analyze the latest manufacturer reply and respond with ONLY valid JSON:
 {{
-  "product_available": true/false/null,   // null = not mentioned
+  "product_available": true/false/null,
   "certifications": true/false/null,
   "pricing_cif": true/false/null,
   "sample": true/false/null,
-  "manufacturer_questions": [],           // questions the manufacturer asked us
-  "ai_can_answer": [],                    // questions AI can answer (general pharma/logistics)
-  "needs_human": [],                      // questions requiring the requester's specific company info
-  "supplier_cannot_supply": false,        // true if they explicitly said they can't supply
-  "needs_reply": true,                    // false only if conversation is complete
+  "manufacturer_questions": [],
+  "ai_can_answer": [],
+  "needs_human": [],                      // ONLY populate if end user is NOT disclosable AND manufacturer asks about end user. For ALL other questions (pricing basis, certificates, samples, MOQ, CIF terms, etc.) answer automatically.
+  "supplier_cannot_supply": false,
+  "needs_reply": true,
   "reply_subject": "Re: ...",
-  "reply_body": "..."                     // write in {language}, professional, concise
+  "reply_body": "..."
 }}
 
 For reply_body:
 - Thank them for the reply
-- Ask specifically about missing items only (don't re-ask answered items)
-- Answer any manufacturer questions if ai_can_answer is not empty
-- If supplier_cannot_supply: write a polite closing email, no follow-up needed
+- Ask specifically about missing items only
+- Answer manufacturer questions about CIF, MOQ, certifications, samples, lead time automatically
+- If end user is disclosable and they ask: include end user info in reply
+- If end user is NOT disclosable and they ask about end user: do NOT answer, set needs_human
+- If supplier_cannot_supply: write a polite closing email
 - Keep it under 150 words"""
 
     headers = {"Content-Type": "application/json", "X-goog-api-key": api_key}
@@ -122,7 +134,7 @@ For reply_body:
         "generationConfig": {"temperature": 0.2, "maxOutputTokens": 1024},
     }
 
-    models = ["gemini-flash-latest", "gemini-2.0-flash-lite", "gemini-1.5-flash-001"]
+    models = ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash-001"]
     async with httpx.AsyncClient(timeout=30.0) as client:
         for model in models:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"

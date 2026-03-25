@@ -94,6 +94,16 @@ async def generate_initial_email(
         "Best regards, Mason",
         "---",
         "",
+    ]
+
+    if notes_clean:
+        prompt_lines += [
+            "SPECIAL NOTES (must be naturally incorporated into the email body if relevant):",
+            notes_clean,
+            "",
+        ]
+
+    prompt_lines += [
         "If language is not English, translate the body naturally into " + language + " while keeping the same structure.",
         "The subject must always be in English: [Acebiopharm] Product inquiry_" + ingredient,
         "",

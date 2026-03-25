@@ -30,6 +30,8 @@ class EmailThread:
     plan_id: str = ""
     manufacturer_id: str = ""
     conversation: list[dict] = field(default_factory=list)
+    end_user_disclosable: bool = True
+    end_user_name: str = ""
 
 
 class ThreadStore:
@@ -58,7 +60,7 @@ class ThreadStore:
         except Exception as exc:
             logger.warning("thread_store_load_failed", error=str(exc))
 
-    def register(self, message_id, to_email, manufacturer_name, ingredient, subject, body, country="", plan_id="", manufacturer_id=""):
+    def register(self, message_id, to_email, manufacturer_name, ingredient, subject, body, country="", plan_id="", manufacturer_id="", end_user_disclosable=True, end_user_name=""):
         now = datetime.utcnow().isoformat()
         thread = EmailThread(
             message_id=message_id,
@@ -72,6 +74,8 @@ class ThreadStore:
             plan_id=plan_id,
             manufacturer_id=manufacturer_id,
             conversation=[{"role": "us", "body": body, "sent_at": now}],
+            end_user_disclosable=end_user_disclosable,
+            end_user_name=end_user_name,
         )
         self._threads[message_id] = thread
         self._by_message_id[message_id] = message_id

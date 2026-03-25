@@ -228,6 +228,14 @@ async def _process_one_manufacturer(plan_id: str, idx: int, item: dict, req: Sim
             sourcing_notes=req.sourcing_notes,
             requester_name=req.requester_name,
         )
+        # sourcing_notes에서 End User 공개 여부 파싱
+        notes = req.sourcing_notes or ""
+        end_user_disclosable = "불가능" not in notes
+        end_user_name = ""
+        for line in notes.splitlines():
+            if "[End User 공개]" in line and "불가능" not in line:
+                end_user_name = line.split("]")[-1].strip()
+
         success, error = await send_outreach_email(
             to_email=email,
             manufacturer_name=item["name"],
@@ -237,6 +245,8 @@ async def _process_one_manufacturer(plan_id: str, idx: int, item: dict, req: Sim
             country=item["country"],
             plan_id=plan_id,
             manufacturer_id=item["id"],
+            end_user_disclosable=end_user_disclosable,
+            end_user_name=end_user_name,
         )
         if success:
             from datetime import datetime
