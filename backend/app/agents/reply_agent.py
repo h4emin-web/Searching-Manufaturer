@@ -81,11 +81,18 @@ async def analyze_and_reply(thread: EmailThread) -> dict:
     end_user_info = ""
     if thread.end_user_disclosable:
         if thread.end_user_name:
-            end_user_info = f"End user CAN be disclosed. End user: {thread.end_user_name}"
+            end_user_info = f"DISCLOSABLE: End user is '{thread.end_user_name}'. If manufacturer asks, you may include this in the reply."
         else:
-            end_user_info = "End user CAN be disclosed."
+            end_user_info = "DISCLOSABLE: End user info can be shared if asked."
     else:
-        end_user_info = "End user CANNOT be disclosed. If manufacturer asks about end user, do NOT answer — flag as needs_human."
+        end_user_info = (
+            "NOT DISCLOSABLE: This is a confidential procurement. "
+            "If the manufacturer asks about the end user, client, or final customer: "
+            "(1) Do NOT mention the end user at all — not even to say it cannot be disclosed. "
+            "(2) Do NOT say 'we cannot disclose' or 'the information is confidential' — this implies there is something to hide. "
+            "(3) Simply redirect by saying we are evaluating multiple suppliers and will share more details once we move forward. "
+            "(4) Set needs_human=true so a human can decide how to handle it."
+        )
 
     prompt = f"""You are a pharmaceutical procurement specialist at a Korean pharma company.
 Analyze the latest manufacturer reply and generate an appropriate response.
@@ -112,19 +119,23 @@ Analyze the latest manufacturer reply and respond with ONLY valid JSON:
   "sample": true/false/null,
   "manufacturer_questions": [],
   "ai_can_answer": [],
-  "needs_human": [],                      // ONLY populate if end user is NOT disclosable AND manufacturer asks about end user. For ALL other questions (pricing basis, certificates, samples, MOQ, CIF terms, etc.) answer automatically.
+  "needs_human": [],
   "supplier_cannot_supply": false,
   "needs_reply": true,
   "reply_subject": "Re: ...",
   "reply_body": "..."
 }}
 
+Rules for needs_human:
+- ONLY set needs_human if: end user is NOT disclosable AND manufacturer explicitly asks about end user/client/customer.
+- For ALL other questions (pricing, certificates, samples, MOQ, CIF terms, lead time, etc.): answer automatically, do NOT set needs_human.
+
 For reply_body:
 - Thank them for the reply
 - Ask specifically about missing items only
 - Answer manufacturer questions about CIF, MOQ, certifications, samples, lead time automatically
 - If end user is disclosable and they ask: include end user info in reply
-- If end user is NOT disclosable and they ask about end user: do NOT answer, set needs_human
+- If end user is NOT disclosable and they ask about end user: do NOT mention end user at all, redirect with "we are evaluating suppliers and will share project details once we proceed"
 - If supplier_cannot_supply: write a polite closing email
 - Keep it under 150 words"""
 
@@ -203,7 +214,7 @@ Return ONLY valid JSON: {{"subject": "...", "body": "..."}}"""
     }
 
     async with httpx.AsyncClient(timeout=20.0) as client:
-        for model in ["gemini-flash-latest", "gemini-2.0-flash-lite"]:
+        for model in ["gemini-2.0-flash", "gemini-2.0-flash-lite"]:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
             try:
                 resp = await client.post(url, headers=headers, json=payload)
