@@ -50,6 +50,7 @@ const MyRequests = ({ user, onNewRequest, onViewRequest, onViewAll, onViewMyProg
   const [requests, setRequests] = useState<SourcingRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -90,7 +91,27 @@ const MyRequests = ({ user, onNewRequest, onViewRequest, onViewAll, onViewMyProg
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "completed" }),
       });
-      // refresh list
+      await load();
+    } catch { /* ignore */ }
+    setCancelling(null);
+  };
+
+  const handleDelete = async (e: React.MouseEvent, req: SourcingRequest) => {
+    e.stopPropagation();
+    if (deleteConfirm !== req.id) {
+      setDeleteConfirm(req.id);
+      setTimeout(() => setDeleteConfirm(null), 3000);
+      return;
+    }
+    setDeleteConfirm(null);
+    setCancelling(req.id);
+    try {
+      if (req.taskId) {
+        await fetch(`${apiBase}/sourcing/${req.taskId}`, { method: "DELETE" });
+      }
+      await fetch(`${apiBase}/users/${encodeURIComponent(user.koreanName)}/requests/${req.id}`, {
+        method: "DELETE",
+      });
       await load();
     } catch { /* ignore */ }
     setCancelling(null);
@@ -216,15 +237,28 @@ const MyRequests = ({ user, onNewRequest, onViewRequest, onViewAll, onViewMyProg
                     )}
                   </div>
 
-                  {/* 진행 중 소싱 중단 버튼 */}
-                  {req.status === "searching" && (
-                    <div className="mt-3 flex justify-end">
+                  {/* 진행 중 소싱: 중단(searching) / 삭제(그 외) */}
+                  {req.status !== "completed" && (
+                    <div className="mt-3 flex justify-end gap-2">
+                      {req.status === "searching" && (
+                        <button
+                          onClick={(e) => handleCancel(e, req)}
+                          disabled={cancelling === req.id}
+                          className="text-data text-muted-foreground hover:text-destructive transition-colors border border-border hover:border-destructive/30 px-3 py-1 rounded-sm disabled:opacity-40"
+                        >
+                          {cancelling === req.id ? "중단 중..." : "✕ 검색 중단"}
+                        </button>
+                      )}
                       <button
-                        onClick={(e) => handleCancel(e, req)}
+                        onClick={(e) => handleDelete(e, req)}
                         disabled={cancelling === req.id}
-                        className="text-data text-muted-foreground hover:text-destructive transition-colors border border-border hover:border-destructive/30 px-3 py-1 rounded-sm disabled:opacity-40"
+                        className={`text-data transition-colors border px-3 py-1 rounded-sm disabled:opacity-40 ${
+                          deleteConfirm === req.id
+                            ? "bg-red-50 dark:bg-red-950 text-red-600 border-red-300 font-semibold"
+                            : "text-muted-foreground hover:text-destructive border-border hover:border-destructive/30"
+                        }`}
                       >
-                        {cancelling === req.id ? "중단 중..." : "✕ 소싱 중단"}
+                        {cancelling === req.id ? "삭제 중..." : deleteConfirm === req.id ? "확인?" : "삭제"}
                       </button>
                     </div>
                   )}
