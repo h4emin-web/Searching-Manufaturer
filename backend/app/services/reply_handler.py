@@ -65,7 +65,7 @@ async def handle_reply(reply: dict) -> None:
         return
 
     new_msg_id = make_msgid(domain="pharma-sourcing.local")
-    success, error = await send_outreach_email(
+    success, error, actual_msg_id = await send_outreach_email(
         to_email=thread.to_email,
         manufacturer_name=thread.manufacturer_name,
         subject=analysis["subject"],
@@ -76,7 +76,7 @@ async def handle_reply(reply: dict) -> None:
     )
 
     if success:
-        thread_store.add_our_reply(thread, new_msg_id, analysis["body"])
+        thread_store.add_our_reply(thread, actual_msg_id, analysis["body"])
         missing = analysis.get("missing_items", [])
         thread.missing_items = missing
         # 누락 항목 없으면 완료

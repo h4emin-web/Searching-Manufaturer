@@ -308,7 +308,7 @@ async def _process_one_manufacturer(plan_id: str, idx: int, item: dict, req: Sim
             if "[End User 공개]" in line and "불가능" not in line:
                 end_user_name = line.split("]")[-1].strip()
 
-        success, error = await send_outreach_email(
+        success, error, _ = await send_outreach_email(
             to_email=email,
             manufacturer_name=item["name"],
             subject=subject,
@@ -426,7 +426,7 @@ class TestEmailRequest(BaseModel):
 @router.post("/test-email")
 async def test_email(req: TestEmailRequest):
     """이메일 발송 직접 테스트 (실제 전송)"""
-    success, error = await send_outreach_email(
+    success, error, _ = await send_outreach_email(
         to_email=req.to_email,
         manufacturer_name=req.manufacturer_name,
         subject=req.subject,
@@ -446,7 +446,7 @@ async def _execute_plan(plan_id: str, mfr_map: dict[str, Manufacturer]):
     async def _dispatch(attempt: OutreachAttempt, mfr: Manufacturer) -> bool:
         from ..models.schemas import OutreachChannel
         if attempt.channel == OutreachChannel.EMAIL and mfr.contact_email:
-            success, _ = await send_outreach_email(
+            success, _, __ = await send_outreach_email(
                 to_email=mfr.contact_email,
                 manufacturer_name=mfr.name,
                 subject="Pharmaceutical Ingredient Sourcing Inquiry",

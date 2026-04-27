@@ -31,13 +31,12 @@ async def _send_via_brevo(
     }
     if reply_to:
         payload["replyTo"] = {"email": reply_to}
-    extra_headers: dict[str, str] = {
-        "Message-ID": message_id,  # Force our own Message-ID so thread matching works
-    }
+    extra_headers: dict[str, str] = {}
     if in_reply_to:
         extra_headers["In-Reply-To"] = in_reply_to
         extra_headers["References"] = in_reply_to
-    payload["headers"] = extra_headers
+    if extra_headers:
+        payload["headers"] = extra_headers
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
@@ -107,7 +106,7 @@ async def send_outreach_email(
     manufacturer_id: str = "",
     end_user_disclosable: bool = True,
     end_user_name: str = "",
-) -> tuple[bool, str | None]:
+) -> tuple[bool, str | None, str]:
     final_message_id = message_id or make_msgid(domain="naver.com")
     from_email = settings.FROM_EMAIL or settings.SMTP_USER
     reply_to = settings.REPLY_TO_EMAIL or from_email
@@ -135,7 +134,7 @@ async def send_outreach_email(
         )
         method = "naver_smtp"
     else:
-        return False, "이메일 발송 설정 없음 (BREVO_API_KEY 또는 SMTP_USER/PASSWORD 필요)"
+        return False, "이메일 발송 설정 없음 (BREVO_API_KEY 또는 SMTP_USER/PASSWORD 필요)", final_message_id
 
     if success:
         logger.info("email_sent", method=method, to=to_email, manufacturer=manufacturer_name, message_id=final_message_id)
@@ -157,4 +156,4 @@ async def send_outreach_email(
     else:
         logger.error("email_failed", method=method, to=to_email, error=error)
 
-    return success, error
+    return success, error, final_message_id

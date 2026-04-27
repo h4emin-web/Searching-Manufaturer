@@ -48,7 +48,7 @@ async def _check_all_threads() -> None:
                 continue
 
             new_msg_id = make_msgid(domain="pharma-sourcing.local")
-            success, error = await send_outreach_email(
+            success, error, actual_msg_id = await send_outreach_email(
                 to_email=thread.to_email,
                 manufacturer_name=thread.manufacturer_name,
                 subject=email_data["subject"],
@@ -61,6 +61,7 @@ async def _check_all_threads() -> None:
             )
 
             if success:
+                thread.last_message_id = actual_msg_id
                 thread_store.increment_followup(thread)
                 thread_store.add_our_reply(thread, new_msg_id, email_data["body"])
                 logger.info("followup_sent", manufacturer=thread.manufacturer_name,
