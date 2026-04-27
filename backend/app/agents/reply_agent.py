@@ -17,14 +17,30 @@ logger = structlog.get_logger()
 
 _COUNTRY_LANGUAGE: dict[str, str] = {
     "China": "Chinese (Simplified, 简体中文)",
+    "중국": "Chinese (Simplified, 简体中文)",
     "Taiwan": "Chinese (Traditional, 繁體中文)",
+    "대만": "Chinese (Traditional, 繁體中文)",
     "Hong Kong": "Chinese (Traditional, 繁體中文)",
+    "홍콩": "Chinese (Traditional, 繁體中文)",
     "Japan": "Japanese (日本語)",
+    "일본": "Japanese (日本語)",
     "Germany": "German (Deutsch)",
+    "독일": "German (Deutsch)",
     "France": "French (Français)",
+    "프랑스": "French (Français)",
     "Italy": "Italian (Italiano)",
+    "이탈리아": "Italian (Italiano)",
     "Spain": "Spanish (Español)",
+    "스페인": "Spanish (Español)",
 }
+
+
+def _get_language(country: str) -> str:
+    c = country.strip().lower()
+    for key, lang in _COUNTRY_LANGUAGE.items():
+        if key.lower() in c:
+            return lang
+    return "English"
 
 # 초기 발송에서 요청한 필수 항목들
 REQUIRED_ITEMS = [
@@ -40,13 +56,6 @@ ITEM_LABELS = {
     "pricing_cif": "가격(CIF)",
     "sample": "샘플 가능 여부",
 }
-
-
-def _get_language(country: str) -> str:
-    for key, lang in _COUNTRY_LANGUAGE.items():
-        if key.lower() in country.lower():
-            return lang
-    return "English"
 
 
 def _build_conversation_text(thread: EmailThread) -> str:

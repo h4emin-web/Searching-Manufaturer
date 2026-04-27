@@ -14,19 +14,28 @@ settings = get_settings()
 
 _COUNTRY_LANGUAGE: dict[str, str] = {
     "China": "Chinese (Simplified)",
+    "중국": "Chinese (Simplified)",
     "Taiwan": "Chinese (Traditional)",
+    "대만": "Chinese (Traditional)",
     "Hong Kong": "Chinese (Traditional)",
+    "홍콩": "Chinese (Traditional)",
     "Japan": "Japanese",
+    "일본": "Japanese",
     "Germany": "German",
+    "독일": "German",
     "France": "French",
+    "프랑스": "French",
     "Italy": "Italian",
+    "이탈리아": "Italian",
     "Spain": "Spanish",
+    "스페인": "Spanish",
 }
 
 
 def _get_language(country: str) -> str:
+    c = country.strip().lower()
     for key, lang in _COUNTRY_LANGUAGE.items():
-        if key.lower() in country.lower():
+        if key.lower() in c:
             return lang
     return "English"
 
