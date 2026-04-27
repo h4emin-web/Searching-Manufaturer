@@ -332,7 +332,19 @@ const SourcingDashboard = ({ apiName, manufacturers, outreachPlanId, apiBase }: 
   const escalated = threads.filter(t => t.status === "escalated").length;
   const completed = threads.filter(t => t.status === "completed").length;
 
-  // Progress based on how much info was gathered (not just sent)
+  // displayThreads must be defined before getInfoScore uses it
+  const displayThreads: ManufacturerThread[] = threads.length > 0
+    ? [...threads].sort((a, b) => {
+        const order: Record<string, number> = { escalated: 0, replied: 1, completed: 2, sent: 3, sending: 4, webform: 5, pending: 6, crawling: 6, failed: 7, closed: 8 };
+        return (order[a.status] ?? 9) - (order[b.status] ?? 9);
+      })
+    : manufacturers.map(m => ({
+        manufacturer_id: m.id, manufacturer_name: m.name, country: m.country,
+        email: m.contact_email || "", status: "pending", sent_at: "", email_subject: "",
+        email_body: "", web_form_url: "", error: "", escalated_questions: [],
+        missing_items: [], conversation: [], has_reply: false, auto_reply_count: 0,
+      }));
+
   const getInfoScore = (t: ManufacturerThread): number => {
     if (t.status === "completed") return 100;
     if (t.status === "closed" || t.status === "failed") return 0;
@@ -347,18 +359,6 @@ const SourcingDashboard = ({ apiName, manufacturers, outreachPlanId, apiBase }: 
   const infoProgress = displayThreads.length > 0
     ? Math.round(displayThreads.reduce((sum, t) => sum + getInfoScore(t), 0) / displayThreads.length)
     : 0;
-
-  const displayThreads: ManufacturerThread[] = threads.length > 0
-    ? [...threads].sort((a, b) => {
-        const order: Record<string, number> = { escalated: 0, replied: 1, completed: 2, sent: 3, sending: 4, webform: 5, pending: 6, crawling: 6, failed: 7, closed: 8 };
-        return (order[a.status] ?? 9) - (order[b.status] ?? 9);
-      })
-    : manufacturers.map(m => ({
-        manufacturer_id: m.id, manufacturer_name: m.name, country: m.country,
-        email: m.contact_email || "", status: "pending", sent_at: "", email_subject: "",
-        email_body: "", web_form_url: "", error: "", escalated_questions: [],
-        missing_items: [], conversation: [], has_reply: false, auto_reply_count: 0,
-      }));
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">
@@ -403,14 +403,12 @@ const SourcingDashboard = ({ apiName, manufacturers, outreachPlanId, apiBase }: 
 
       {/* 제조원 목록 */}
       <div className="space-y-2">
-        {displayThreads.map((t, i) => {
+        {displayThreads.map((t) => {
           const hasContent = t.conversation.length > 0 || !!t.web_form_url || !!t.error;
           const isHighlight = ["replied", "escalated", "completed"].includes(t.status);
           return (
-            <motion.div key={t.manufacturer_id}
-              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.03 }}
-              className={`rounded-xl border p-4 transition-all ${
+            <div key={t.manufacturer_id}
+              className={`rounded-xl border p-4 transition-colors ${
                 isHighlight
                   ? t.status === "escalated"
                     ? "border-amber-300 dark:border-amber-700 bg-amber-50/50 dark:bg-amber-950/30"
@@ -452,7 +450,7 @@ const SourcingDashboard = ({ apiName, manufacturers, outreachPlanId, apiBase }: 
                 </div>
                 {hasContent && <span className="text-xs text-muted-foreground shrink-0 mt-1">상세 →</span>}
               </div>
-            </motion.div>
+            </div>
           );
         })}
       </div>
