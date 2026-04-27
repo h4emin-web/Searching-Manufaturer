@@ -199,14 +199,17 @@ async def chat_with_plan(plan_id: str, req: ChatRequest):
     }
 
     async with httpx.AsyncClient(timeout=20.0) as client:
-        for model in ["gemini-2.0-flash", "gemini-2.0-flash-lite"]:
+        for model in ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash-001"]:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
             try:
                 resp = await client.post(url, headers=api_headers, json=payload)
                 if resp.is_success:
                     text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
                     return {"reply": text.strip()}
-            except Exception:
+                else:
+                    logger.warning("chat_gemini_error", model=model, status=resp.status_code, body=resp.text[:300])
+            except Exception as e:
+                logger.warning("chat_gemini_exception", model=model, error=str(e))
                 continue
 
     return {"reply": "AI 응답 생성 실패. 잠시 후 다시 시도해주세요."}
