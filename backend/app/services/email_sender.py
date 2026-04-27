@@ -46,8 +46,10 @@ async def _send_via_brevo(
                 json=payload,
             )
         if resp.is_success:
-            # We set Message-ID ourselves in headers, so always use our message_id
-            return True, None, message_id
+            # Brevo overrides Message-ID with their own @smtp-relay.sendinblue.com ID
+            # Must use Brevo's actual ID or reply In-Reply-To won't match
+            brevo_msg_id = resp.json().get("messageId") or message_id
+            return True, None, brevo_msg_id
         return False, f"Brevo {resp.status_code}: {resp.text[:300]}", message_id
     except Exception as exc:
         return False, str(exc), message_id
