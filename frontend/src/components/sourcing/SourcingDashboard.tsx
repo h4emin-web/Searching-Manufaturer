@@ -33,18 +33,20 @@ interface SourcingDashboardProps {
   apiBase: string;
 }
 
-const STATUS_CONFIG: Record<string, { emoji: string; label: string; bg: string; text: string; border: string }> = {
-  pending:   { emoji: "⏳", label: "대기중",        bg: "bg-zinc-50 dark:bg-zinc-900",       text: "text-zinc-500",             border: "border-zinc-200 dark:border-zinc-700" },
-  crawling:  { emoji: "🔍", label: "처리중",        bg: "bg-zinc-50 dark:bg-zinc-900",       text: "text-zinc-500",             border: "border-zinc-200 dark:border-zinc-700" },
-  sending:   { emoji: "📤", label: "발송중",        bg: "bg-blue-50 dark:bg-blue-950",       text: "text-blue-600",             border: "border-blue-200 dark:border-blue-800" },
-  sent:      { emoji: "📤", label: "발송완료",      bg: "bg-blue-50 dark:bg-blue-950",       text: "text-blue-600",             border: "border-blue-200 dark:border-blue-800" },
-  webform:   { emoji: "🌐", label: "홈페이지 문의", bg: "bg-orange-50 dark:bg-orange-950",   text: "text-orange-600",           border: "border-orange-200 dark:border-orange-800" },
-  failed:    { emoji: "❌", label: "실패",          bg: "bg-red-50 dark:bg-red-950",         text: "text-red-600",              border: "border-red-200 dark:border-red-800" },
-  replied:   { emoji: "💬", label: "답장 수신",     bg: "bg-emerald-50 dark:bg-emerald-950", text: "text-emerald-700",          border: "border-emerald-300 dark:border-emerald-700" },
-  escalated: { emoji: "⚠️", label: "검토 필요",    bg: "bg-amber-50 dark:bg-amber-950",     text: "text-amber-700",            border: "border-amber-300 dark:border-amber-700" },
-  completed: { emoji: "✅", label: "수집 완료",     bg: "bg-emerald-100 dark:bg-emerald-900",text: "text-emerald-800 font-bold", border: "border-emerald-400 dark:border-emerald-600" },
-  closed:    { emoji: "🚫", label: "공급 불가",     bg: "bg-zinc-100 dark:bg-zinc-800",      text: "text-zinc-400",             border: "border-zinc-200 dark:border-zinc-700" },
+const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; border: string }> = {
+  pending:   { label: "대기중",        bg: "bg-zinc-50 dark:bg-zinc-900",        text: "text-zinc-500",              border: "border-zinc-200 dark:border-zinc-700" },
+  crawling:  { label: "처리중",        bg: "bg-zinc-50 dark:bg-zinc-900",        text: "text-zinc-500",              border: "border-zinc-200 dark:border-zinc-700" },
+  sending:   { label: "발송중",        bg: "bg-blue-50 dark:bg-blue-950",        text: "text-blue-600",              border: "border-blue-200 dark:border-blue-800" },
+  sent:      { label: "발송완료",      bg: "bg-blue-50 dark:bg-blue-950",        text: "text-blue-600",              border: "border-blue-200 dark:border-blue-800" },
+  webform:   { label: "홈페이지 문의", bg: "bg-orange-50 dark:bg-orange-950",    text: "text-orange-600",            border: "border-orange-200 dark:border-orange-800" },
+  failed:    { label: "실패",          bg: "bg-red-50 dark:bg-red-950",          text: "text-red-600",               border: "border-red-200 dark:border-red-800" },
+  replied:   { label: "답장 수신",     bg: "bg-emerald-50 dark:bg-emerald-950",  text: "text-emerald-700",           border: "border-emerald-300 dark:border-emerald-700" },
+  escalated: { label: "검토 필요",     bg: "bg-amber-50 dark:bg-amber-950",      text: "text-amber-700",             border: "border-amber-300 dark:border-amber-700" },
+  completed: { label: "수집 완료",     bg: "bg-emerald-100 dark:bg-emerald-900", text: "text-emerald-800 font-bold",  border: "border-emerald-400 dark:border-emerald-600" },
+  closed:    { label: "공급 불가",     bg: "bg-zinc-100 dark:bg-zinc-800",       text: "text-zinc-400",              border: "border-zinc-200 dark:border-zinc-700" },
 };
+
+const ALL_ITEMS = ["가격(CIF)", "GMP 인증서", "COA", "샘플 가능 여부"];
 
 function formatDate(iso: string) {
   if (!iso) return "";
@@ -118,11 +120,10 @@ function ThreadModal({ thread, apiBase, onClose }: { thread: ManufacturerThread;
         onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div className="flex items-center gap-2 flex-wrap">
-            <span>{cfg.emoji}</span>
             <span className="font-semibold text-foreground">{thread.manufacturer_name}</span>
             {thread.country && <span className="text-sm text-muted-foreground">{thread.country}</span>}
             {thread.email && <span className="text-xs text-muted-foreground font-mono">{thread.email}</span>}
-            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${cfg.bg} ${cfg.text} border ${cfg.border}`}>{cfg.label}</span>
+            <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.text} ${cfg.border}`}>{cfg.label}</span>
           </div>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors text-xl ml-4">×</button>
         </div>
@@ -149,7 +150,7 @@ function ThreadModal({ thread, apiBase, onClose }: { thread: ManufacturerThread;
             <div key={i} className={`space-y-2 pb-4 ${i < thread.conversation.length - 1 ? "border-b border-border" : ""}`}>
               <div className="flex items-center gap-3 text-sm">
                 <span className={`font-semibold ${msg.role === "us" ? "text-primary" : "text-foreground"}`}>
-                  {msg.role === "us" ? "📤 발송" : `💬 ${thread.manufacturer_name}`}
+                  {msg.role === "us" ? "발송" : thread.manufacturer_name}
                 </span>
                 <span className="text-muted-foreground text-xs">{formatDate(msg.sent_at)}</span>
               </div>
@@ -168,6 +169,104 @@ function ThreadModal({ thread, apiBase, onClose }: { thread: ManufacturerThread;
         </div>
       </motion.div>
     </motion.div>
+  );
+}
+
+function ConversationSummary({ thread }: { thread: ManufacturerThread }) {
+  const { status, missing_items, sent_at, has_reply, auto_reply_count, conversation } = thread;
+
+  // Derive received items from what's NOT in missing_items
+  const receivedItems = ALL_ITEMS.filter(
+    item => !missing_items.some(m => m.includes(item.split("(")[0].trim()) || item.includes(m.split("/")[0].trim()))
+  );
+
+  const sentCount = conversation.filter(m => m.role === "us").length;
+  const replyCount = conversation.filter(m => m.role === "manufacturer").length;
+  const lastSentAt = conversation.filter(m => m.role === "us").slice(-1)[0]?.sent_at || sent_at;
+
+  if (["pending", "crawling"].includes(status)) {
+    return <p className="text-xs text-muted-foreground mt-1.5">발송 준비 중...</p>;
+  }
+
+  if (status === "sending") {
+    return <p className="text-xs text-muted-foreground mt-1.5">발송 중...</p>;
+  }
+
+  if (status === "failed") {
+    return <p className="text-xs text-red-500 mt-1.5">발송 실패 — {thread.error || "오류 발생"}</p>;
+  }
+
+  if (status === "webform") {
+    return <p className="text-xs text-orange-600 mt-1.5">이메일 없음 — 홈페이지 직접 문의 필요</p>;
+  }
+
+  if (status === "closed") {
+    return <p className="text-xs text-muted-foreground mt-1.5">공급 불가 회신 수신</p>;
+  }
+
+  return (
+    <div className="mt-2 space-y-1 text-xs">
+      {/* 요청 발송 */}
+      <div className="flex items-start gap-2">
+        <span className="text-muted-foreground shrink-0 w-12">요청</span>
+        <span className="text-foreground/70">
+          {ALL_ITEMS.join(" · ")} 요청
+          {lastSentAt && <span className="text-muted-foreground ml-1.5">{formatDate(lastSentAt)}</span>}
+          {sentCount > 1 && <span className="text-muted-foreground ml-1.5">({sentCount}회 발송)</span>}
+        </span>
+      </div>
+
+      {/* 수신된 항목 */}
+      {has_reply && receivedItems.length > 0 && (
+        <div className="flex items-start gap-2">
+          <span className="text-muted-foreground shrink-0 w-12">수신</span>
+          <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+            {receivedItems.join(" · ")} 회신받음
+            {replyCount > 1 && <span className="text-muted-foreground font-normal ml-1.5">({replyCount}회 답장)</span>}
+          </span>
+        </div>
+      )}
+
+      {/* 미수신 항목 */}
+      {missing_items.length > 0 && (
+        <div className="flex items-start gap-2">
+          <span className="text-muted-foreground shrink-0 w-12">미수신</span>
+          <span className="text-amber-700 dark:text-amber-400">
+            {missing_items.join(" · ")}
+            {auto_reply_count > 0
+              ? <span className="ml-1.5">— 재요청 발송 완료</span>
+              : <span className="ml-1.5">— 재요청 예정</span>}
+          </span>
+        </div>
+      )}
+
+      {/* 완료 */}
+      {status === "completed" && missing_items.length === 0 && (
+        <div className="flex items-start gap-2">
+          <span className="text-muted-foreground shrink-0 w-12">완료</span>
+          <span className="text-emerald-700 dark:text-emerald-400 font-medium">전체 정보 수집 완료</span>
+        </div>
+      )}
+
+      {/* 답변 대기 */}
+      {!has_reply && status === "sent" && (
+        <div className="flex items-start gap-2">
+          <span className="text-muted-foreground shrink-0 w-12">상태</span>
+          <span className="text-muted-foreground">답변 대기 중</span>
+        </div>
+      )}
+
+      {/* 검토 필요 */}
+      {status === "escalated" && thread.escalated_questions.length > 0 && (
+        <div className="flex items-start gap-2">
+          <span className="text-muted-foreground shrink-0 w-12">검토</span>
+          <span className="text-amber-700 dark:text-amber-400">
+            {thread.escalated_questions[0]}
+            {thread.escalated_questions.length > 1 && ` 외 ${thread.escalated_questions.length - 1}건`}
+          </span>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -277,7 +376,6 @@ const SourcingDashboard = ({ apiName, manufacturers, outreachPlanId, apiBase }: 
   const replied = threads.filter(t => ["replied", "completed", "escalated"].includes(t.status)).length;
   const escalated = threads.filter(t => t.status === "escalated").length;
   const completed = threads.filter(t => t.status === "completed").length;
-  const active = threads.filter(t => ["replied", "sent", "webform"].includes(t.status)).length;
 
   const displayThreads: ManufacturerThread[] = threads.length > 0
     ? [...threads].sort((a, b) => {
@@ -297,95 +395,39 @@ const SourcingDashboard = ({ apiName, manufacturers, outreachPlanId, apiBase }: 
       <div className="flex items-center gap-4 flex-wrap text-sm">
         <span className="font-semibold text-foreground text-base">{apiName} 소싱</span>
         <span className="text-muted-foreground">제조사 {total}곳</span>
-        {active > 0 && <span className="text-blue-600 font-medium">📤 발송완료 {active}건</span>}
-        {replied > 0 && <span className="text-emerald-600 font-medium">💬 답장 {replied}건</span>}
-        {escalated > 0 && <span className="text-amber-600 font-medium">⚠️ 검토필요 {escalated}건</span>}
-        {completed > 0 && <span className="text-emerald-700 font-semibold">✅ 완료 {completed}건</span>}
+        {replied > 0 && <span className="text-emerald-600 font-medium">답장 {replied}건</span>}
+        {escalated > 0 && <span className="text-amber-600 font-medium">검토필요 {escalated}건</span>}
+        {completed > 0 && <span className="text-emerald-700 font-semibold">완료 {completed}건</span>}
       </div>
 
-      {/* 대화 카드 목록 */}
+      {/* 제조사 카드 목록 */}
       <div className="space-y-2">
         {displayThreads.map((t) => {
           const cfg = STATUS_CONFIG[t.status] || STATUS_CONFIG.pending;
-          const lastMsg = t.conversation[t.conversation.length - 1];
-          const prevMsg = t.conversation.length > 1 ? t.conversation[t.conversation.length - 2] : null;
-          const isActive = ["replied", "escalated", "completed"].includes(t.status);
+          const clickable = t.conversation.length > 0 || !!t.web_form_url;
 
           return (
             <div
               key={t.manufacturer_id}
-              onClick={() => (t.conversation.length > 0 || !!t.web_form_url) && setSelectedThread(t)}
+              onClick={() => clickable && setSelectedThread(t)}
               className={`rounded-xl border p-4 transition-colors ${cfg.bg} ${cfg.border} ${
-                t.conversation.length > 0 || t.web_form_url ? "cursor-pointer hover:brightness-[0.97]" : ""
+                clickable ? "cursor-pointer hover:brightness-[0.97]" : ""
               }`}
             >
-              {/* 헤더 행 */}
-              <div className="flex items-center justify-between gap-3 mb-2">
+              <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-base">{cfg.emoji}</span>
                   <span className="font-semibold text-foreground truncate">{t.manufacturer_name}</span>
                   {t.country && (
                     <span className="text-xs text-muted-foreground bg-background/60 px-1.5 py-0.5 rounded shrink-0">{t.country}</span>
                   )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  {t.auto_reply_count > 0 && (
-                    <span className="text-xs text-muted-foreground">대화 {t.auto_reply_count}회</span>
-                  )}
                   <span className={`text-xs font-medium ${cfg.text}`}>{cfg.label}</span>
-                  {isActive && <span className="text-xs text-muted-foreground">→</span>}
+                  {clickable && <span className="text-xs text-muted-foreground">상세 보기 →</span>}
                 </div>
               </div>
 
-              {/* 대화 미리보기 */}
-              {lastMsg ? (
-                <div className="space-y-1.5">
-                  {/* 이전 메시지 (있을 때) */}
-                  {prevMsg && (
-                    <div className={`pl-3 border-l-2 ${prevMsg.role === "us" ? "border-primary/30" : "border-emerald-400/40"} opacity-50`}>
-                      <div className="flex items-center gap-1.5 mb-0.5">
-                        <span className="text-[10px] font-medium text-muted-foreground">
-                          {prevMsg.role === "us" ? "📤 발송" : `💬 답장`}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground">{formatDate(prevMsg.sent_at)}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground line-clamp-1">
-                        {prevMsg.body.replace(/\n/g, " ").slice(0, 80)}
-                      </p>
-                    </div>
-                  )}
-                  {/* 최신 메시지 */}
-                  <div className={`pl-3 border-l-2 ${lastMsg.role === "us" ? "border-primary/50" : "border-emerald-500/70"}`}>
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <span className={`text-[11px] font-semibold ${lastMsg.role === "us" ? "text-primary" : "text-emerald-700 dark:text-emerald-400"}`}>
-                        {lastMsg.role === "us" ? "📤 발송" : "💬 답장"}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground">{formatDate(lastMsg.sent_at)}</span>
-                    </div>
-                    <p className="text-sm text-foreground/80 line-clamp-2 leading-snug">
-                      {lastMsg.body.replace(/\n+/g, " ").slice(0, 150)}
-                    </p>
-                  </div>
-                </div>
-              ) : t.status === "webform" && t.web_form_url ? (
-                <a href={t.web_form_url} target="_blank" rel="noopener noreferrer"
-                  onClick={e => e.stopPropagation()}
-                  className="text-xs text-primary hover:underline font-mono mt-1 block">🌐 홈페이지 직접 문의 →</a>
-              ) : t.email ? (
-                <p className="text-xs text-muted-foreground mt-1 font-mono">{t.email}</p>
-              ) : null}
-
-              {/* 미수신 항목 */}
-              {t.missing_items.length > 0 && (
-                <div className="mt-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 px-2 py-1 rounded">
-                  ⚠️ 미수신: {t.missing_items.join(" · ")}
-                </div>
-              )}
-              {t.escalated_questions.length > 0 && (
-                <div className="mt-1 text-xs text-amber-700 dark:text-amber-400">
-                  ⚠️ {t.escalated_questions[0]}{t.escalated_questions.length > 1 ? ` 외 ${t.escalated_questions.length - 1}건` : ""}
-                </div>
-              )}
+              <ConversationSummary thread={t} />
             </div>
           );
         })}
