@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Manufacturer } from "@/pages/Index";
 
@@ -215,10 +215,100 @@ function ThreadModal({ thread, apiBase, onClose }: { thread: ManufacturerThread;
   );
 }
 
+function FeedbackPanel({ planId, apiBase }: { planId: string; apiBase: string }) {
+  const [messages, setMessages] = useState<{ role: "user" | "ai"; text: string }[]>([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const send = async () => {
+    const msg = input.trim();
+    if (!msg || loading || !planId) return;
+    setInput("");
+    setMessages(prev => [...prev, { role: "user", text: msg }]);
+    setLoading(true);
+    try {
+      const res = await fetch(`${apiBase}/outreach/simple-plans/${planId}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msg }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(prev => [...prev, { role: "ai", text: data.reply }]);
+      }
+    } catch { /**/ }
+    setLoading(false);
+  };
+
+  return (
+    <div className="bg-card rounded-xl border border-border overflow-hidden">
+      <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+        <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+        <div>
+          <p className="text-sm font-semibold text-foreground">AI 어시스턴트</p>
+          <p className="text-xs text-muted-foreground">진행 상황 질문, 지시사항, 조언 요청 등</p>
+        </div>
+      </div>
+
+      {messages.length > 0 && (
+        <div className="max-h-64 overflow-y-auto p-4 space-y-3">
+          {messages.map((m, i) => (
+            <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div className={`max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed ${
+                m.role === "user"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-foreground"
+              }`}>
+                {m.text}
+              </div>
+            </div>
+          ))}
+          {loading && (
+            <div className="flex justify-start">
+              <div className="bg-muted rounded-xl px-3 py-2 text-sm text-muted-foreground">
+                <span className="animate-pulse">생각 중...</span>
+              </div>
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
+      )}
+
+      <div className="p-4 flex gap-2">
+        <input
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
+          placeholder={planId ? "예: 답장 안 온 곳들 어떻게 할까요? / 중국 제조원 상황은?" : "소싱 시작 후 사용 가능합니다"}
+          disabled={!planId}
+          className="flex-1 bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-40"
+        />
+        <button
+          onClick={send}
+          disabled={loading || !input.trim() || !planId}
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium disabled:opacity-40 hover:opacity-90 transition-opacity shrink-0"
+        >
+          전송
+        </button>
+      </div>
+    </div>
+  );
+}
+
 const SourcingDashboard = ({ apiName, manufacturers, outreachPlanId, apiBase }: SourcingDashboardProps) => {
   const [threads, setThreads] = useState<ManufacturerThread[]>([]);
   const [selectedThread, setSelectedThread] = useState<ManufacturerThread | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const planIdRef = useRef(outreachPlanId);
+
+  useEffect(() => {
+    planIdRef.current = outreachPlanId;
+  }, [outreachPlanId]);
 
   useEffect(() => {
     if (!outreachPlanId) return;
@@ -229,6 +319,7 @@ const SourcingDashboard = ({ apiName, manufacturers, outreachPlanId, apiBase }: 
       } catch { /**/ }
     };
     fetchThreads();
+    if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(fetchThreads, 3000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [outreachPlanId, apiBase]);
@@ -253,33 +344,46 @@ const SourcingDashboard = ({ apiName, manufacturers, outreachPlanId, apiBase }: 
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: "전체",    value: total,     color: "text-foreground",   bg: "bg-card" },
-          { label: "발송완료", value: sent,     color: "text-blue-600",     bg: "bg-blue-50 dark:bg-blue-950" },
-          { label: "답장수신", value: replied,  color: "text-emerald-600",  bg: "bg-emerald-50 dark:bg-emerald-950" },
-          { label: "검토필요", value: escalated,color: "text-amber-600",    bg: "bg-amber-50 dark:bg-amber-950" },
-        ].map(({ label, value, color, bg }) => (
-          <div key={label} className={`${bg} rounded-xl p-4 border border-border`}>
-            <p className="text-xs text-muted-foreground font-medium mb-1">{label}</p>
-            <p className={`text-2xl font-bold ${color}`}>{value}<span className="text-sm font-normal text-muted-foreground ml-1">곳</span></p>
+      {/* 발송 현황 카드 */}
+      <div className="bg-card rounded-xl border border-border p-5">
+        <div className="flex items-end justify-between gap-6 flex-wrap">
+          <div>
+            <p className="text-xs text-muted-foreground font-medium mb-1">{apiName} — 발송 현황</p>
+            <div className="flex items-baseline gap-2">
+              <span className="text-4xl font-bold text-blue-600">{sent}</span>
+              <span className="text-lg text-muted-foreground">/ {total}개 발송 완료</span>
+            </div>
+            <div className="flex items-center gap-4 mt-2 text-sm">
+              <span className="text-emerald-600 font-medium">답장 {replied}건</span>
+              {escalated > 0 && <span className="text-amber-600 font-medium">검토필요 {escalated}건</span>}
+              {completed > 0 && <span className="text-emerald-700 font-semibold">수집완료 {completed}건</span>}
+            </div>
           </div>
-        ))}
+          <div className="flex-1 min-w-[160px] max-w-xs">
+            <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+              <span>진행률</span>
+              <span className="font-mono">{total > 0 ? Math.round((sent / total) * 100) : 0}%</span>
+            </div>
+            <div className="h-2 bg-secondary rounded-full overflow-hidden">
+              <motion.div className="h-full bg-primary rounded-full"
+                animate={{ width: total > 0 ? `${(sent / total) * 100}%` : "0%" }}
+                transition={{ duration: 0.5 }} />
+            </div>
+            {replied > 0 && (
+              <div className="mt-1">
+                <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                  <motion.div className="h-full bg-emerald-500 rounded-full"
+                    animate={{ width: total > 0 ? `${(replied / total) * 100}%` : "0%" }}
+                    transition={{ duration: 0.5 }} />
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-0.5">답장률 {total > 0 ? Math.round((replied / total) * 100) : 0}%</p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      <div className="bg-card rounded-xl p-4 border border-border space-y-2">
-        <div className="flex items-center justify-between text-sm">
-          <span className="font-medium text-foreground">{apiName} 소싱 진행률</span>
-          <span className="text-muted-foreground font-mono">{total > 0 ? Math.round((sent / total) * 100) : 0}%</span>
-        </div>
-        <div className="h-2 bg-secondary rounded-full overflow-hidden">
-          <motion.div className="h-full bg-primary rounded-full"
-            animate={{ width: total > 0 ? `${(sent / total) * 100}%` : "0%" }}
-            transition={{ duration: 0.5 }} />
-        </div>
-        {completed > 0 && <p className="text-xs text-emerald-600 font-medium">{completed}곳 정보 수집 완료</p>}
-      </div>
-
+      {/* 제조원 목록 */}
       <div className="space-y-2">
         {displayThreads.map((t, i) => {
           const hasContent = t.conversation.length > 0 || !!t.web_form_url || !!t.error;
@@ -334,6 +438,9 @@ const SourcingDashboard = ({ apiName, manufacturers, outreachPlanId, apiBase }: 
           );
         })}
       </div>
+
+      {/* AI 피드백 패널 */}
+      <FeedbackPanel planId={outreachPlanId} apiBase={apiBase} />
 
       <AnimatePresence>
         {selectedThread && (

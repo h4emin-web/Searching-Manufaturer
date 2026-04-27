@@ -217,6 +217,9 @@ const Index = () => {
     setRequirements(req.requirements);
     setCurrentRequestId(req.id);
     setCurrentTaskId(req.taskId || "");
+    // Restore planId from localStorage so dashboard re-connects after navigation
+    const savedPlanId = localStorage.getItem(`planId_${req.id}`) || "";
+    if (savedPlanId) setCurrentOutreachPlanId(savedPlanId);
     if (req.status === "reviewing") {
       setStep("results");
     } else if (req.status === "monitoring" || req.status === "outreach") {
@@ -378,6 +381,7 @@ const Index = () => {
       if (res.ok) {
         const data = await res.json();
         setCurrentOutreachPlanId(data.plan_id);
+        localStorage.setItem(`planId_${currentRequestId}`, data.plan_id);
       }
     } catch { /* ignore */ }
 

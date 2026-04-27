@@ -140,6 +140,78 @@ async def get_plan_threads(plan_id: str):
     return result
 
 
+class ChatRequest(BaseModel):
+    message: str
+
+
+@router.post("/simple-plans/{plan_id}/chat")
+async def chat_with_plan(plan_id: str, req: ChatRequest):
+    """AI 어시스턴트 채팅 - 플랜 상태 기반 실시간 피드백"""
+    plan = await _load_plan(plan_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+
+    from ..services.thread_store import thread_store
+    from ..config import get_settings
+
+    settings = get_settings()
+    if not settings.GEMINI_API_KEY:
+        return {"reply": "AI 연결이 설정되지 않았습니다."}
+
+    items = plan.get("items", [])
+    threads = thread_store.find_by_plan(plan_id)
+    thread_map = {t.manufacturer_id: t for t in threads}
+
+    status_summary: dict[str, int] = {}
+    for item in items:
+        st = item.get("status", "pending")
+        status_summary[st] = status_summary.get(st, 0) + 1
+
+    manufacturer_lines = []
+    for item in items:
+        t = thread_map.get(item["id"])
+        line = f"- {item['name']} ({item.get('country', '')}) [{item.get('status', 'pending')}]"
+        if t and t.has_reply:
+            line += " → 답장받음"
+        if t and t.missing_items:
+            line += f" 미수신: {', '.join(t.missing_items)}"
+        manufacturer_lines.append(line)
+
+    context = (
+        "현재 소싱 진행 상황:\n"
+        + "상태 요약: " + ", ".join(f"{k}: {v}건" for k, v in status_summary.items()) + "\n\n"
+        + "제조원 목록:\n"
+        + "\n".join(manufacturer_lines)
+    )
+
+    prompt = (
+        "당신은 제약원료 소싱 전문가 AI 어시스턴트입니다.\n"
+        "현재 아웃리치 캠페인 상황을 분석하고 사용자의 질문이나 요청에 답변하세요.\n\n"
+        + context + "\n\n"
+        + "사용자: " + req.message + "\n\n"
+        "한국어로 간결하고 실용적으로 답변하세요. 3문장 이내로 핵심만 말하세요."
+    )
+
+    api_headers = {"Content-Type": "application/json", "X-goog-api-key": settings.GEMINI_API_KEY}
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.4, "maxOutputTokens": 512},
+    }
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        for model in ["gemini-2.0-flash", "gemini-2.0-flash-lite"]:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+            try:
+                resp = await client.post(url, headers=api_headers, json=payload)
+                if resp.is_success:
+                    text = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                    return {"reply": text.strip()}
+            except Exception:
+                continue
+
+    return {"reply": "AI 응답 생성 실패. 잠시 후 다시 시도해주세요."}
+
+
 class TranslateRequest(BaseModel):
     text: str
     target: str = "Korean"
