@@ -81,17 +81,25 @@ async def analyze_and_reply(thread: EmailThread) -> dict:
     end_user_info = ""
     if thread.end_user_disclosable:
         if thread.end_user_name:
-            end_user_info = f"DISCLOSABLE: End user is '{thread.end_user_name}'. If manufacturer asks, you may include this in the reply."
+            end_user_info = (
+                f"DISCLOSABLE: End user is '{thread.end_user_name}'. "
+                "IMPORTANT: NEVER mention the end user proactively. "
+                "ONLY disclose if the manufacturer explicitly asks who the end customer/client is."
+            )
         else:
-            end_user_info = "DISCLOSABLE: End user info can be shared if asked."
+            end_user_info = (
+                "DISCLOSABLE: End user info can be shared if asked. "
+                "IMPORTANT: NEVER mention the end user proactively. "
+                "ONLY disclose if the manufacturer explicitly asks."
+            )
     else:
         end_user_info = (
-            "NOT DISCLOSABLE: This is a confidential procurement. "
-            "If the manufacturer asks about the end user, client, or final customer: "
-            "(1) Do NOT mention the end user at all — not even to say it cannot be disclosed. "
-            "(2) Do NOT say 'we cannot disclose' or 'the information is confidential' — this implies there is something to hide. "
-            "(3) Simply redirect by saying we are evaluating multiple suppliers and will share more details once we move forward. "
-            "(4) Set needs_human=true so a human can decide how to handle it."
+            "NO END USER: We currently have no specific end customer. "
+            "We are doing market research and exploring supply sources for potential future business. "
+            "NEVER mention end user, client, or customer proactively. "
+            "If the manufacturer explicitly asks who the end customer/client is: "
+            "say that we currently have no specific client — we are doing market research "
+            "and building our supplier network for future business opportunities."
         )
 
     prompt = f"""You are a pharmaceutical procurement specialist at a Korean pharma company.
@@ -127,15 +135,17 @@ Analyze the latest manufacturer reply and respond with ONLY valid JSON:
 }}
 
 Rules for needs_human:
-- ONLY set needs_human if: end user is NOT disclosable AND manufacturer explicitly asks about end user/client/customer.
-- For ALL other questions (pricing, certificates, samples, MOQ, CIF terms, lead time, etc.): answer automatically, do NOT set needs_human.
+- Only set needs_human if there is a genuinely complex situation that AI cannot handle.
+- For ALL standard questions (pricing, certificates, samples, MOQ, CIF terms, lead time, end user inquiries, etc.): answer automatically, do NOT set needs_human.
 
 For reply_body:
 - Thank them for the reply
 - Ask specifically about missing items only
 - Answer manufacturer questions about CIF, MOQ, certifications, samples, lead time automatically
-- If end user is disclosable and they ask: include end user info in reply
-- If end user is NOT disclosable and they ask about end user: do NOT mention end user at all, redirect with "we are evaluating suppliers and will share project details once we proceed"
+- NEVER proactively mention end user, client, or customer — even if end user policy says disclosable
+- If manufacturer explicitly asks who the end customer/client is:
+  - If disclosable and end user name is known: share the end user name
+  - If not disclosable or no end user: say "We currently have no specific end customer — we are doing market research and building our supplier network for potential future business"
 - If supplier_cannot_supply: write a polite closing email
 - Keep it under 150 words"""
 
