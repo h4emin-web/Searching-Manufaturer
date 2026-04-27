@@ -31,12 +31,13 @@ async def _send_via_brevo(
     }
     if reply_to:
         payload["replyTo"] = {"email": reply_to}
-    extra_headers: dict[str, str] = {}
+    extra_headers: dict[str, str] = {
+        "Message-ID": message_id,  # Force our own Message-ID so thread matching works
+    }
     if in_reply_to:
         extra_headers["In-Reply-To"] = in_reply_to
         extra_headers["References"] = in_reply_to
-    if extra_headers:
-        payload["headers"] = extra_headers
+    payload["headers"] = extra_headers
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
@@ -45,9 +46,8 @@ async def _send_via_brevo(
                 json=payload,
             )
         if resp.is_success:
-            # Brevo가 실제로 부여한 Message-ID 사용
-            brevo_message_id = resp.json().get("messageId", message_id)
-            return True, None, brevo_message_id
+            # We set Message-ID ourselves in headers, so always use our message_id
+            return True, None, message_id
         return False, f"Brevo {resp.status_code}: {resp.text[:300]}", message_id
     except Exception as exc:
         return False, str(exc), message_id

@@ -88,31 +88,48 @@ async def handle_reply(reply: dict) -> None:
         logger.error("auto_reply_send_failed", error=error)
 
 
+async def _get_plan(plan_id: str) -> dict | None:
+    """메모리에서 플랜 조회, 없으면 Supabase에서 로드"""
+    plan = outreach_router._simple_plans.get(plan_id)
+    if plan:
+        return plan
+    # Render 재시작 후 메모리 초기화 시 Supabase에서 복구
+    return await outreach_router._load_plan(plan_id)
+
+
 def _update_plan_status(thread, status: str) -> None:
     """outreach plan 아이템 상태 업데이트 + Supabase 저장"""
     if not thread.plan_id or not thread.manufacturer_id:
         return
-    plan = outreach_router._simple_plans.get(thread.plan_id)
+    asyncio.create_task(_async_update_plan_status(thread.plan_id, thread.manufacturer_id, status))
+
+
+async def _async_update_plan_status(plan_id: str, manufacturer_id: str, status: str) -> None:
+    plan = await _get_plan(plan_id)
     if not plan:
         return
     for item in plan["items"]:
-        if item["id"] == thread.manufacturer_id:
+        if item["id"] == manufacturer_id:
             item["status"] = status
             break
-    asyncio.create_task(outreach_router._save_plan(thread.plan_id))
+    await outreach_router._save_plan(plan_id)
 
 
 def _escalate_to_plan(thread, questions: list[str], missing: list[str]) -> None:
     """outreach plan 아이템에 에스컬레이션 정보 기재 + Supabase 저장"""
     if not thread.plan_id or not thread.manufacturer_id:
         return
-    plan = outreach_router._simple_plans.get(thread.plan_id)
+    asyncio.create_task(_async_escalate_to_plan(thread.plan_id, thread.manufacturer_id, questions, missing))
+
+
+async def _async_escalate_to_plan(plan_id: str, manufacturer_id: str, questions: list[str], missing: list[str]) -> None:
+    plan = await _get_plan(plan_id)
     if not plan:
         return
     for item in plan["items"]:
-        if item["id"] == thread.manufacturer_id:
+        if item["id"] == manufacturer_id:
             item["status"] = "escalated"
             item["escalated_questions"] = questions
             item["missing_items"] = missing
             break
-    asyncio.create_task(outreach_router._save_plan(thread.plan_id))
+    await outreach_router._save_plan(plan_id)

@@ -78,16 +78,25 @@ class ThreadStore:
             end_user_name=end_user_name,
         )
         self._threads[message_id] = thread
+        # Index both with and without angle brackets for robust matching
+        normalized = self._normalize_msgid(message_id)
         self._by_message_id[message_id] = message_id
+        self._by_message_id[normalized] = message_id
+        self._by_message_id[f"<{normalized}>"] = message_id
         self._bg(self._persist_thread(thread))
         self._bg(self._persist_index(message_id, message_id))
 
+    @staticmethod
+    def _normalize_msgid(raw: str) -> str:
+        return raw.strip().strip("<>").strip()
+
     def find_thread_by_reply(self, in_reply_to: str, references: str = "") -> EmailThread | None:
-        for msg_id in [in_reply_to] + references.split():
-            msg_id = msg_id.strip()
-            origin = self._by_message_id.get(msg_id)
-            if origin and origin in self._threads:
-                return self._threads[origin]
+        candidates = [in_reply_to] + references.split()
+        for raw in candidates:
+            for lookup in [raw.strip(), self._normalize_msgid(raw), f"<{self._normalize_msgid(raw)}>"]:
+                origin = self._by_message_id.get(lookup)
+                if origin and origin in self._threads:
+                    return self._threads[origin]
         return None
 
     def add_reply(self, thread: EmailThread, body: str) -> None:

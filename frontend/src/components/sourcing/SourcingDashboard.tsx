@@ -98,7 +98,9 @@ function StatusBadge({ status }: { status: string }) {
 
 function formatDate(iso: string) {
   if (!iso) return "";
-  const d = new Date(iso);
+  // Backend stores UTC without 'Z' — append it so JS parses as UTC, not local
+  const normalized = /[Zz+]/.test(iso) ? iso : iso + "Z";
+  const d = new Date(normalized);
   return d.toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
@@ -330,6 +332,22 @@ const SourcingDashboard = ({ apiName, manufacturers, outreachPlanId, apiBase }: 
   const escalated = threads.filter(t => t.status === "escalated").length;
   const completed = threads.filter(t => t.status === "completed").length;
 
+  // Progress based on how much info was gathered (not just sent)
+  const getInfoScore = (t: ManufacturerThread): number => {
+    if (t.status === "completed") return 100;
+    if (t.status === "closed" || t.status === "failed") return 0;
+    if (t.status === "webform") return 5;
+    if (["replied", "escalated"].includes(t.status)) {
+      const missing = t.missing_items?.length ?? 4;
+      return Math.max(30, Math.round(((4 - missing) / 4) * 100));
+    }
+    if (t.status === "sent") return 15;
+    return 0;
+  };
+  const infoProgress = displayThreads.length > 0
+    ? Math.round(displayThreads.reduce((sum, t) => sum + getInfoScore(t), 0) / displayThreads.length)
+    : 0;
+
   const displayThreads: ManufacturerThread[] = threads.length > 0
     ? [...threads].sort((a, b) => {
         const order: Record<string, number> = { escalated: 0, replied: 1, completed: 2, sent: 3, sending: 4, webform: 5, pending: 6, crawling: 6, failed: 7, closed: 8 };
@@ -361,12 +379,12 @@ const SourcingDashboard = ({ apiName, manufacturers, outreachPlanId, apiBase }: 
           </div>
           <div className="flex-1 min-w-[160px] max-w-xs">
             <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-              <span>진행률</span>
-              <span className="font-mono">{total > 0 ? Math.round((sent / total) * 100) : 0}%</span>
+              <span>정보 수집률</span>
+              <span className="font-mono">{infoProgress}%</span>
             </div>
             <div className="h-2 bg-secondary rounded-full overflow-hidden">
               <motion.div className="h-full bg-primary rounded-full"
-                animate={{ width: total > 0 ? `${(sent / total) * 100}%` : "0%" }}
+                animate={{ width: `${infoProgress}%` }}
                 transition={{ duration: 0.5 }} />
             </div>
             {replied > 0 && (
