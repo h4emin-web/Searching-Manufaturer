@@ -6,7 +6,7 @@ export interface SourcingRequest {
   ingredientName: string;
   purpose: string;
   requirements: string[];
-  status: "searching" | "reviewing" | "outreach" | "monitoring" | "negotiating" | "completed";
+  status: "searching" | "reviewing" | "outreach" | "monitoring" | "negotiating" | "completed" | "cancelled";
   createdAt: string;
   taskId?: string;
   totalFound?: number;
@@ -71,7 +71,7 @@ const MyRequests = ({ user, onNewRequest, onViewRequest, onViewAll, onViewMyProg
           sent: r.sent,
           notes: r.notes ?? [],
         }));
-        setRequests(mapped);
+        setRequests(mapped.filter((r: SourcingRequest) => r.status !== "cancelled"));
       }
     } catch { /* ignore */ }
     setLoading(false);

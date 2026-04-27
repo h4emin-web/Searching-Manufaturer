@@ -212,24 +212,9 @@ Return ONLY valid JSON: {{"briefing": "..."}}"""
 
 @router.delete("/{user_name}/requests/{request_id}")
 async def delete_user_request(user_name: str, request_id: str):
-    """소싱 요청 삭제"""
-    db = get_supabase()
-    if db:
-        try:
-            params = {"id": f"eq.{request_id}", "user_name": f"eq.{user_name}"}
-            async with httpx.AsyncClient() as client:
-                res = await client.delete(
-                    f"{db.base_url}/user_requests",
-                    headers=db.headers,
-                    params=params,
-                )
-                res.raise_for_status()
-            return {"ok": True}
-        except Exception:
-            pass
-    requests = _memory.get(user_name, [])
-    _memory[user_name] = [r for r in requests if r["id"] != request_id]
-    return {"ok": True}
+    """소싱 요청 삭제 (cancelled 상태로 soft-delete)"""
+    body = UpdateRequestBody(status="cancelled")
+    return await update_user_request(user_name, request_id, body)
 
 
 @router.patch("/{user_name}/requests/{request_id}")
