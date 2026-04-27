@@ -35,10 +35,10 @@ REQUIRED_ITEMS = [
 ]
 
 ITEM_LABELS = {
-    "product_available": "제품 공급 가능 여부",
-    "certifications": "COA/GMP 인증서",
-    "pricing_cif": "CIF Busan 가격",
-    "sample": "무상 샘플 가능 여부",
+    "product_available": "공급 가능 여부",
+    "certifications": "GMP/COA 인증서",
+    "pricing_cif": "가격(CIF)",
+    "sample": "샘플 가능 여부",
 }
 
 

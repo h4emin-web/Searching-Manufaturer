@@ -46,7 +46,7 @@ const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; b
   closed:    { label: "공급 불가",     bg: "bg-zinc-100 dark:bg-zinc-800",       text: "text-zinc-400",              border: "border-zinc-200 dark:border-zinc-700" },
 };
 
-const ALL_ITEMS = ["가격(CIF)", "GMP 인증서", "COA", "샘플 가능 여부"];
+const ALL_ITEMS = ["공급 가능 여부", "GMP/COA 인증서", "가격(CIF)", "샘플 가능 여부"];
 
 function formatDate(iso: string) {
   if (!iso) return "";
@@ -175,11 +175,7 @@ function ThreadModal({ thread, apiBase, onClose }: { thread: ManufacturerThread;
 function ConversationSummary({ thread }: { thread: ManufacturerThread }) {
   const { status, missing_items, sent_at, has_reply, auto_reply_count, conversation } = thread;
 
-  // Derive received items from what's NOT in missing_items
-  const receivedItems = ALL_ITEMS.filter(
-    item => !missing_items.some(m => m.includes(item.split("(")[0].trim()) || item.includes(m.split("/")[0].trim()))
-  );
-
+  const receivedItems = ALL_ITEMS.filter(item => !missing_items.includes(item));
   const sentCount = conversation.filter(m => m.role === "us").length;
   const replyCount = conversation.filter(m => m.role === "manufacturer").length;
   const lastSentAt = conversation.filter(m => m.role === "us").slice(-1)[0]?.sent_at || sent_at;
@@ -187,19 +183,15 @@ function ConversationSummary({ thread }: { thread: ManufacturerThread }) {
   if (["pending", "crawling"].includes(status)) {
     return <p className="text-xs text-muted-foreground mt-1.5">발송 준비 중...</p>;
   }
-
   if (status === "sending") {
     return <p className="text-xs text-muted-foreground mt-1.5">발송 중...</p>;
   }
-
   if (status === "failed") {
     return <p className="text-xs text-red-500 mt-1.5">발송 실패 — {thread.error || "오류 발생"}</p>;
   }
-
   if (status === "webform") {
     return <p className="text-xs text-orange-600 mt-1.5">이메일 없음 — 홈페이지 직접 문의 필요</p>;
   }
-
   if (status === "closed") {
     return <p className="text-xs text-muted-foreground mt-1.5">공급 불가 회신 수신</p>;
   }
@@ -210,18 +202,20 @@ function ConversationSummary({ thread }: { thread: ManufacturerThread }) {
       <div className="flex items-start gap-2">
         <span className="text-muted-foreground shrink-0 w-12">요청</span>
         <span className="text-foreground/70">
-          {ALL_ITEMS.join(" · ")} 요청
+          {ALL_ITEMS.join(" · ")}
           {lastSentAt && <span className="text-muted-foreground ml-1.5">{formatDate(lastSentAt)}</span>}
           {sentCount > 1 && <span className="text-muted-foreground ml-1.5">({sentCount}회 발송)</span>}
         </span>
       </div>
 
       {/* 수신된 항목 */}
-      {has_reply && receivedItems.length > 0 && (
+      {has_reply && (
         <div className="flex items-start gap-2">
           <span className="text-muted-foreground shrink-0 w-12">수신</span>
           <span className="text-emerald-700 dark:text-emerald-400 font-medium">
-            {receivedItems.join(" · ")} 회신받음
+            {receivedItems.length > 0
+              ? <>{receivedItems.join(" · ")} 수신</>
+              : "내용 분석 중"}
             {replyCount > 1 && <span className="text-muted-foreground font-normal ml-1.5">({replyCount}회 답장)</span>}
           </span>
         </div>
@@ -232,10 +226,10 @@ function ConversationSummary({ thread }: { thread: ManufacturerThread }) {
         <div className="flex items-start gap-2">
           <span className="text-muted-foreground shrink-0 w-12">미수신</span>
           <span className="text-amber-700 dark:text-amber-400">
-            {missing_items.join(" · ")}
+            {missing_items.join(" · ")} 아직 미수신
             {auto_reply_count > 0
-              ? <span className="ml-1.5">— 재요청 발송 완료</span>
-              : <span className="ml-1.5">— 재요청 예정</span>}
+              ? <span className="ml-1"> — 재요청 발송 완료</span>
+              : <span className="ml-1"> — 재요청 예정</span>}
           </span>
         </div>
       )}
@@ -244,7 +238,7 @@ function ConversationSummary({ thread }: { thread: ManufacturerThread }) {
       {status === "completed" && missing_items.length === 0 && (
         <div className="flex items-start gap-2">
           <span className="text-muted-foreground shrink-0 w-12">완료</span>
-          <span className="text-emerald-700 dark:text-emerald-400 font-medium">전체 정보 수집 완료</span>
+          <span className="text-emerald-700 dark:text-emerald-400 font-medium">전체 항목 수집 완료</span>
         </div>
       )}
 
