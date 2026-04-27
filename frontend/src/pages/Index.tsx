@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+﻿import { useState, useEffect, useRef } from "react";
+import { LogOut } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import LoginStep from "@/components/sourcing/LoginStep";
 import SearchStep from "@/components/sourcing/SearchStep";
@@ -433,13 +434,15 @@ const Index = () => {
               새 소싱
             </button>
           )}
-          <span className="text-data font-mono flex items-center gap-1">
+          <span className="text-data font-mono flex items-center gap-2">
+            <span className="text-foreground font-medium">{user?.koreanName}</span>
             <button
-              onClick={() => { if (logoutConfirm) { handleLogout(); } else { setLogoutConfirm(true); } }}
-              onBlur={() => setTimeout(() => setLogoutConfirm(false), 150)}
-              className={`transition-colors cursor-pointer ${logoutConfirm ? "text-destructive" : "text-muted-foreground hover:text-foreground"}`}
+              onClick={() => { if (logoutConfirm) { handleLogout(); } else { setLogoutConfirm(true); setTimeout(() => setLogoutConfirm(false), 3000); } }}
+              title="로그아웃"
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors ${logoutConfirm ? "bg-red-100 dark:bg-red-950 text-red-600 font-semibold" : "text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950"}`}
             >
-              {logoutConfirm ? "로그아웃?" : user?.koreanName}
+              <LogOut className="w-3.5 h-3.5" />
+              {logoutConfirm ? "확인?" : "로그아웃"}
             </button>
             <span className="text-muted-foreground">
               {" "}—{" "}
@@ -565,3 +568,4 @@ const Index = () => {
 };
 
 export default Index;
+
