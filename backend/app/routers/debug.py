@@ -92,18 +92,35 @@ async def test_llm():
 
 @router.get("/threads")
 async def list_threads():
-    """등록된 스레드 목록"""
-    return [
-        {
-            "message_id": t.message_id,
-            "manufacturer": t.manufacturer_name,
-            "to_email": t.to_email,
-            "ingredient": t.ingredient,
-            "auto_reply_count": t.auto_reply_count,
-            "conversation_turns": len(t.conversation),
-        }
-        for t in thread_store.all_threads()
-    ]
+    """등록된 스레드 목록 (자동답변 진단용)"""
+    from ..routers import outreach as outreach_router
+    all_plans = list(outreach_router._simple_plans.keys())
+    return {
+        "total_threads": len(thread_store.all_threads()),
+        "plans_in_memory": all_plans,
+        "threads": [
+            {
+                "message_id": t.message_id,
+                "last_message_id": t.last_message_id,
+                "manufacturer": t.manufacturer_name,
+                "to_email": t.to_email,
+                "ingredient": t.ingredient,
+                "plan_id": t.plan_id,
+                "has_reply": t.has_reply,
+                "auto_reply_count": t.auto_reply_count,
+                "follow_up_count": t.follow_up_count,
+                "conversation_turns": len(t.conversation),
+                "last_sent_at": t.last_sent_at,
+            }
+            for t in thread_store.all_threads()
+        ],
+    }
+
+
+@router.get("/threads/message-index")
+async def message_index():
+    """메시지 ID 인덱스 조회 (스레드 매칭 진단)"""
+    return {k: v for k, v in thread_store._by_message_id.items()}
 
 
 @router.get("/imap-check")

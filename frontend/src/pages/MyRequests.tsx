@@ -184,14 +184,11 @@ const MyRequests = ({ user, onNewRequest, onViewRequest, onViewAll, onViewMyProg
                           {req.requirements.length > 0 && (
                             <span>{req.requirements.slice(0, 3).join(" · ")}{req.requirements.length > 3 ? " ..." : ""}</span>
                           )}
-                          {req.totalFound !== undefined && req.totalFound > 0 && (
-                            <span>제조소 <span className="text-foreground font-semibold">{req.totalFound}</span>곳</span>
+                          {req.sent !== undefined && req.sent > 0 && (
+                            <span>발송 <span className="text-foreground font-semibold">{req.sent}</span>개</span>
                           )}
-                          {req.status === "monitoring" && req.sent !== undefined && (
-                            <>
-                              <span>발송 <span className="text-foreground font-semibold">{req.sent}</span></span>
-                              <span>응답 <span className="text-foreground font-semibold">{req.replied || 0}</span></span>
-                            </>
+                          {req.replied !== undefined && req.replied > 0 && (
+                            <span>답장 <span className="text-emerald-600 font-semibold">{req.replied}</span>건</span>
                           )}
                         </div>
                       </div>
