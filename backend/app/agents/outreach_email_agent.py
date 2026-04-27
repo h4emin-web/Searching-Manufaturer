@@ -32,10 +32,17 @@ def _get_language(country: str) -> str:
 
 
 def _clean_notes(sourcing_notes: str) -> str:
-    """고객사명 라인 제거 (제조원 노출 방지)"""
-    hide_prefix = "[유객사명]"  # [고객사명]
-    lines = [l for l in sourcing_notes.splitlines()
-             if not l.startswith(hide_prefix)]
+    """고객사명/end user 관련 내용 제거"""
+    skip_keywords = [
+        "[고객사명]", "[유객사명]", "고객사", "client", "end user", "end-user",
+        "customer", "클라이언트", "발주처",
+    ]
+    lines = []
+    for line in sourcing_notes.splitlines():
+        lower = line.lower()
+        if any(kw.lower() in lower for kw in skip_keywords):
+            continue
+        lines.append(line)
     return "\n".join(lines).strip()
 
 
@@ -98,12 +105,18 @@ async def generate_initial_email(
 
     if notes_clean:
         prompt_lines += [
-            "SPECIAL NOTES (must be naturally incorporated into the email body if relevant):",
+            "ADDITIONAL NOTES (incorporate only technical/requirement details if relevant):",
             notes_clean,
             "",
         ]
 
     prompt_lines += [
+        "STRICT RULES — NEVER violate these:",
+        "- NEVER mention any client name, customer name, or company name other than Acebiopharm.",
+        "- NEVER mention 'end user', 'end-user', 'client', or 'customer' in any form.",
+        "- NEVER write phrases like 'for our client', 'end user cannot be disclosed', 'on behalf of', or any similar wording.",
+        "- Do NOT explain who the ingredient is for. Simply state we are looking for it.",
+        "",
         "If language is not English, translate the body naturally into " + language + " while keeping the same structure.",
         "The subject must always be in English: [Acebiopharm] Product inquiry_" + ingredient,
         "",
