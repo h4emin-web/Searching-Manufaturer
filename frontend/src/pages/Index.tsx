@@ -217,15 +217,24 @@ const Index = () => {
     setRequirements(req.requirements);
     setCurrentRequestId(req.id);
     setCurrentTaskId(req.taskId || "");
-    // Restore planId from localStorage so dashboard re-connects after navigation
     const savedPlanId = localStorage.getItem(`planId_${req.id}`) || "";
     if (savedPlanId) setCurrentOutreachPlanId(savedPlanId);
+
     if (req.status === "reviewing") {
       setStep("results");
-    } else if (req.status === "monitoring" || req.status === "outreach") {
+    } else if (
+      req.status === "monitoring" || req.status === "outreach" || req.status === "negotiating"
+      || savedPlanId  // outreach가 시작된 적 있으면 무조건 대시보드
+    ) {
       setStep("sourcing");
+      // outreachManufacturers가 비어있으면 localStorage에서 복원
+      if (outreachManufacturers.length === 0) {
+        const savedMfrs = localStorage.getItem(`outreachMfrs_${req.id}`);
+        if (savedMfrs) {
+          try { setOutreachManufacturers(JSON.parse(savedMfrs)); } catch { /* ignore */ }
+        }
+      }
     } else if (req.status === "searching" && req.taskId) {
-      // resume polling for in-progress task
       setSourcingProgress(0);
       setSourcingError("");
       setStep("searching");
@@ -382,6 +391,7 @@ const Index = () => {
         const data = await res.json();
         setCurrentOutreachPlanId(data.plan_id);
         localStorage.setItem(`planId_${currentRequestId}`, data.plan_id);
+        localStorage.setItem(`outreachMfrs_${currentRequestId}`, JSON.stringify(selectedMfrs));
       }
     } catch { /* ignore */ }
 

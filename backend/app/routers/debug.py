@@ -132,20 +132,29 @@ async def imap_check():
 
     imap_user = settings.IMAP_USER or settings.SMTP_USER
     imap_pass = settings.IMAP_PASSWORD or settings.SMTP_PASSWORD
+    imap_host = settings.IMAP_HOST or "imap.naver.com"
+    imap_port = settings.IMAP_PORT or 993
 
     result = {
+        "imap_host": imap_host,
+        "imap_port": imap_port,
         "imap_user": imap_user,
         "imap_password_length": len(imap_pass) if imap_pass else 0,
         "imap_password_preview": imap_pass[:4] + "..." if imap_pass else "(empty)",
         "has_spaces": " " in imap_pass if imap_pass else False,
         "status": None,
+        "unseen_count": None,
         "error": None,
     }
 
     try:
-        with imaplib.IMAP4_SSL("imap.gmail.com", 993) as imap:
+        with imaplib.IMAP4_SSL(imap_host, imap_port) as imap:
             imap.login(imap_user, imap_pass)
+            imap.select("INBOX")
+            _, data = imap.search(None, "UNSEEN")
+            unseen = data[0].split() if data[0] else []
             result["status"] = "success"
+            result["unseen_count"] = len(unseen)
     except imaplib.IMAP4.error as e:
         result["status"] = "auth_failed"
         result["error"] = str(e)
@@ -154,6 +163,54 @@ async def imap_check():
         result["error"] = str(e)
 
     return result
+
+
+@router.get("/email-send-check")
+async def email_send_check():
+    """이메일 발송 설정 진단 (실제 발송 없음)"""
+    from ..config import get_settings
+    settings = get_settings()
+
+    return {
+        "brevo_api_key_set": bool(settings.BREVO_API_KEY),
+        "brevo_key_preview": settings.BREVO_API_KEY[:8] + "..." if settings.BREVO_API_KEY else "(empty)",
+        "smtp_user": settings.SMTP_USER or "(empty)",
+        "smtp_password_set": bool(settings.SMTP_PASSWORD),
+        "from_email": settings.FROM_EMAIL or settings.SMTP_USER or "(empty)",
+        "reply_to_email": settings.REPLY_TO_EMAIL or "(same as from)",
+        "test_email_override": settings.TEST_EMAIL_OVERRIDE or "(disabled)",
+        "send_method": "brevo" if settings.BREVO_API_KEY else ("smtp" if settings.SMTP_USER else "NONE"),
+    }
+
+@router.get("/brevo-check")
+async def brevo_check():
+    """Brevo API 상태 확인 - 크레딧/잔액 조회"""
+    import httpx
+    from ..config import get_settings
+    settings = get_settings()
+
+    if not settings.BREVO_API_KEY:
+        return {"status": "no_key", "error": "BREVO_API_KEY not set"}
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                "https://api.brevo.com/v3/account",
+                headers={"api-key": settings.BREVO_API_KEY},
+            )
+            if resp.is_success:
+                data = resp.json()
+                plan = data.get("plan", [{}])
+                return {
+                    "status": "ok",
+                    "email": data.get("email", ""),
+                    "company": data.get("companyName", ""),
+                    "plan": plan,
+                }
+            return {"status": "failed", "code": resp.status_code, "error": resp.text[:200]}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
 
 @router.get("/gmail-check")
 async def gmail_check():
