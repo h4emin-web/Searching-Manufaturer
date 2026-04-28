@@ -139,7 +139,7 @@ async def generate_initial_email(
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.3},
     }
-    models = ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash-001"]
+    models = ["gemini-2.5-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash-001"]
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         for model in models:

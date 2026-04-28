@@ -175,7 +175,7 @@ Return ONLY valid JSON: {{"briefing": "..."}}"""
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 resp = await client.post(
-                    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+                    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
                     headers={"Content-Type": "application/json", "X-goog-api-key": api_key},
                     json={
                         "contents": [{"parts": [{"text": prompt}]}],

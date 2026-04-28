@@ -164,7 +164,7 @@ For reply_body:
         "generationConfig": {"temperature": 0.2, "maxOutputTokens": 1024},
     }
 
-    models = ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash-001"]
+    models = ["gemini-2.5-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash-001"]
     async with httpx.AsyncClient(timeout=30.0) as client:
         for model in models:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
@@ -233,7 +233,7 @@ Return ONLY valid JSON: {{"subject": "...", "body": "..."}}"""
     }
 
     async with httpx.AsyncClient(timeout=20.0) as client:
-        for model in ["gemini-2.0-flash", "gemini-2.0-flash-lite"]:
+        for model in ["gemini-2.5-flash", "gemini-2.0-flash-lite"]:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
             try:
                 resp = await client.post(url, headers=headers, json=payload)

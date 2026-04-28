@@ -64,7 +64,7 @@ async def test_llm():
         items = await _query_openai_compatible(
             base_url="https://generativelanguage.googleapis.com/v1beta/openai",
             api_key=settings.GEMINI_API_KEY or "",
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             system_prompt="You are a helpful assistant. Return JSON only.",
             user_prompt='List 2 real pharmaceutical manufacturers of Ibuprofen as JSON: {"manufacturers":[{"name":"...","country":"..."}]}',
             timeout=30.0,

@@ -199,7 +199,7 @@ async def chat_with_plan(plan_id: str, req: ChatRequest):
     }
 
     async with httpx.AsyncClient(timeout=20.0) as client:
-        for model in ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash-001"]:
+        for model in ["gemini-2.5-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash-001"]:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
             try:
                 resp = await client.post(url, headers=api_headers, json=payload)
@@ -236,7 +236,7 @@ async def translate_text(req: TranslateRequest):
         "generationConfig": {"temperature": 0.1, "maxOutputTokens": 2048}
     }
     async with httpx.AsyncClient(timeout=20.0) as client:
-        for model in ["gemini-2.0-flash", "gemini-2.0-flash-lite"]:
+        for model in ["gemini-2.5-flash", "gemini-2.0-flash-lite"]:
             base = "https://generativelanguage.googleapis.com/v1beta/models/"
             url = base + model + ":generateContent"
             try:
