@@ -4,10 +4,11 @@
   "description": "원료/샘플 업무 관리 앱",
   "main": "src/main/main.js",
   "scripts": {
-    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
+    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && cross-env ELECTRON_RUN_AS_NODE=0 NODE_ENV=development electron .\"",
     "build": "vite build && electron-builder",
     "vite": "vite",
-    "electron": "electron ."
+    "electron": "electron .",
+    "ubist": "node scripts/ubist-server.js"
   },
   "build": {
     "appId": "com.business.manager",
@@ -38,13 +39,18 @@
     "@vitejs/plugin-react": "^5.1.4",
     "electron": "^41.0.0",
     "electron-builder": "^26.8.1",
+    "express": "^5.2.1",
+    "qrcode": "^1.5.4",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "vite": "^7.3.1"
+    "sharp": "^0.34.5",
+    "vite": "^7.3.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
+    "jimp": "^1.6.0",
     "wait-on": "^9.0.4"
   }
 }

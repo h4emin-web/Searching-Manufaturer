@@ -4,3 +4,5 @@ release/
 .env
 .env.local
 *.log
+
+.vercel

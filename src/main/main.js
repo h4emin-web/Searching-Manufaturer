@@ -38,13 +38,10 @@ function createWindow() {
 }
 
 function createTray() {
-  // 기본 아이콘 (없으면 빈 이미지)
   let icon
   try {
     icon = nativeImage.createFromPath(path.join(__dirname, '../../public/icon.ico'))
-    if (icon.isEmpty()) {
-      icon = nativeImage.createEmpty()
-    }
+    if (icon.isEmpty()) icon = nativeImage.createEmpty()
   } catch {
     icon = nativeImage.createEmpty()
   }
@@ -53,41 +50,20 @@ function createTray() {
   tray.setToolTip('업무 관리')
 
   const contextMenu = Menu.buildFromTemplate([
-    {
-      label: '열기',
-      click: () => {
-        mainWindow.show()
-        mainWindow.focus()
-      },
-    },
+    { label: '열기', click: () => { mainWindow.show(); mainWindow.focus() } },
     { type: 'separator' },
-    {
-      label: '종료',
-      click: () => {
-        app.exit(0)
-      },
-    },
+    { label: '종료', click: () => { app.exit(0) } },
   ])
 
   tray.setContextMenu(contextMenu)
-
   tray.on('double-click', () => {
-    if (mainWindow.isVisible()) {
-      mainWindow.hide()
-    } else {
-      mainWindow.show()
-      mainWindow.focus()
-    }
+    if (mainWindow.isVisible()) mainWindow.hide()
+    else { mainWindow.show(); mainWindow.focus() }
   })
 }
 
 app.whenReady().then(() => {
-  // Windows 시작 시 자동 실행 등록
-  app.setLoginItemSettings({
-    openAtLogin: true,
-    path: process.execPath,
-  })
-
+  app.setLoginItemSettings({ openAtLogin: true, path: process.execPath })
   createWindow()
   createTray()
 })
