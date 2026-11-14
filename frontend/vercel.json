@@ -1,6 +1,0 @@
-{
-  "installCommand": "echo skip",
-  "buildCommand": "mkdir -p dist && echo > dist/.keep",
-  "outputDirectory": "dist",
-  "routes": [{ "src": "/(.*)", "status": 404 }]
-}
