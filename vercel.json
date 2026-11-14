@@ -1,6 +1,6 @@
 {
   "installCommand": "echo skip",
-  "buildCommand": "mkdir -p dist && cp offline.html dist/index.html",
+  "buildCommand": "mkdir -p dist && echo > dist/.keep",
   "outputDirectory": "dist",
-  "routes": [{ "src": "/(.*)", "status": 404, "dest": "/index.html" }]
+  "routes": [{ "src": "/(.*)", "status": 404 }]
 }
